@@ -123,8 +123,9 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
             }
 
             toast.success(`Imported ${imported} tasks from Google`)
-        } catch (e: any) {
-            toast.error(e.message || 'Failed to import from Google')
+        } catch (e: unknown) {
+            const errorMessage = e instanceof Error ? e.message : 'Failed to import from Google';
+            toast.error(errorMessage)
         } finally {
             setGoogleSyncing(false)
         }
@@ -140,8 +141,9 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
             if (!res.ok) throw new Error(data.error)
 
             toast.success(data.message || 'Tasks synced to Google!')
-        } catch (e: any) {
-            toast.error(e.message || 'Failed to sync to Google')
+        } catch (e: unknown) {
+            const errorMessage = e instanceof Error ? e.message : 'Failed to sync to Google';
+            toast.error(errorMessage)
         } finally {
             setGoogleSyncing(false)
         }

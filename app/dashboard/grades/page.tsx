@@ -10,8 +10,6 @@ import {
     Plus,
     GraduationCap,
     TrendingUp,
-    Calculator,
-    BarChart3,
     Trash2,
     Loader2,
     ChevronDown,
@@ -88,7 +86,6 @@ export default function GradesPage() {
     const [newCourse, setNewCourse] = useState({ name: '', credits: 3, grade: 'S', semester: 'Semester 1' })
     const [showAddForm, setShowAddForm] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
-    const [editingCourse, setEditingCourse] = useState<string | null>(null)
     const [targetCGPA, setTargetCGPA] = useState<number>(9.0)
     const [programCredits, setProgramCredits] = useState<number>(239) // User can adjust
 
@@ -98,35 +95,34 @@ export default function GradesPage() {
     const supabase = createClient()
 
     useEffect(() => {
-        fetchCourses()
-    }, [])
+        const fetchCourses = async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (!user) return
 
-    const fetchCourses = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+                const { data, error } = await supabase
+                    .from('courses')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: false })
 
-            const { data, error } = await supabase
-                .from('courses')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false })
+                if (error) throw error
+                setCourses(data || [])
 
-            if (error) throw error
-            setCourses(data || [])
-
-            // Auto-open the most recent semester
-            if (data && data.length > 0) {
-                const recentSem = data[0].semester || 'Semester 1'
-                setOpenSemesters({ [recentSem]: true })
+                // Auto-open the most recent semester
+                if (data && data.length > 0) {
+                    const recentSem = data[0].semester || 'Semester 1'
+                    setOpenSemesters({ [recentSem]: true })
+                }
+            } catch (error) {
+                console.error('Error fetching courses:', error)
+                toast.error('Failed to load courses')
+            } finally {
+                setLoading(false)
             }
-        } catch (error) {
-            console.error('Error fetching courses:', error)
-            toast.error('Failed to load courses')
-        } finally {
-            setLoading(false)
         }
-    }
+        fetchCourses()
+    }, [supabase])
 
     const calculateGPA = (courseList: Course[]): string => {
         if (courseList.length === 0) return '0.00'
@@ -222,7 +218,6 @@ export default function GradesPage() {
             setCourses(courses.map(c =>
                 c.id === id ? { ...c, semester: newSemester } : c
             ))
-            setEditingCourse(null)
             toast.success('Semester updated')
         } catch (error) {
             toast.error('Failed to update semester')
@@ -385,6 +380,7 @@ export default function GradesPage() {
                                     const existingNames = new Set(courses.map(c => c.name.toLowerCase().trim()))
 
                                     // Pre-process courses with default semester if missing
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                     const allCourses = data.courses.map((c: any) => {
                                         let grade = c.grade?.toUpperCase() || 'A'
                                         if (grade === 'O') grade = 'S' // Normalize
@@ -408,6 +404,7 @@ export default function GradesPage() {
 
                                     // Filter out duplicates (silently skip)
                                     const coursesToInsert = allCourses.filter(
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                         (c: any) => !existingNames.has(c.name.toLowerCase().trim())
                                     )
                                     const duplicatesSkipped = allCourses.length - coursesToInsert.length
@@ -431,8 +428,9 @@ export default function GradesPage() {
                                             : `Imported ${inserted.length} courses`
                                         toast.success(msg)
                                     }
-                                } catch (e: any) {
-                                    toast.error(`Import failed: ${e.message}`)
+                                } catch (e: unknown) {
+                                    const err = e instanceof Error ? e.message : String(e);
+                                    toast.error(`Import failed: ${err}`)
                                 }
                             }
                         }}
@@ -822,7 +820,7 @@ export default function GradesPage() {
                                                         <AlertDialogHeader>
                                                             <AlertDialogTitle>Delete Course</AlertDialogTitle>
                                                             <AlertDialogDescription>
-                                                                Are you sure you want to delete "{course.name}"? This action cannot be undone.
+                                                                Are you sure you want to delete &quot;{course.name}&quot;? This action cannot be undone.
                                                             </AlertDialogDescription>
                                                         </AlertDialogHeader>
                                                         <AlertDialogFooter>

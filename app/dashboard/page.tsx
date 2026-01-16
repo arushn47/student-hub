@@ -4,7 +4,7 @@ import { TasksWidget } from '@/components/dashboard/TasksWidget'
 import { NotesWidget } from '@/components/dashboard/NotesWidget'
 import { NextClassWidget } from '@/components/dashboard/NextClassWidget'
 import { QuickActions } from '@/components/dashboard/QuickActions'
-import { FileText, CheckSquare, Clock, Target, Timer, Flame, TrendingUp } from 'lucide-react'
+import { FileText, CheckSquare, Clock, Target, Flame, TrendingUp } from 'lucide-react'
 import type { Task, Note, ClassSchedule } from '@/types'
 
 async function getStats(supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never, userId: string) {

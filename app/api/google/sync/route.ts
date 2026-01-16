@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getTasksClient, GoogleTokens } from '@/lib/google'
 
 // POST: Sync local tasks to Google Tasks
-export async function POST(req: NextRequest) {
+export async function POST() {
     try {
         const supabase = await createClient()
         const { data: { user } } = await supabase.auth.getUser()
@@ -72,8 +72,9 @@ export async function POST(req: NextRequest) {
             message: `Synced ${syncedCount} tasks to Google`
         })
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Sync error:', error)
-        return NextResponse.json({ error: error.message || 'Sync failed' }, { status: 500 })
+        const errorMessage = error instanceof Error ? error.message : 'Sync failed';
+        return NextResponse.json({ error: errorMessage }, { status: 500 })
     }
 }

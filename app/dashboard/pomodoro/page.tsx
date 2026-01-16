@@ -10,7 +10,6 @@ import {
     Coffee,
     Brain,
     Flame,
-    Settings,
     Volume2,
     VolumeX
 } from 'lucide-react'
@@ -55,26 +54,44 @@ export default function PomodoroPage() {
 
         if (isRunning && timeLeft > 0) {
             interval = setInterval(() => {
-                setTimeLeft((prev) => prev - 1)
+                setTimeLeft((prev) => {
+                    if (prev <= 1) {
+                        // Timer finished
+                        playSound()
+                        if (mode === 'focus') {
+                            setSessionsCompleted(c => c + 1)
+                            const nextCount = sessionsCompleted + 1
+                            const nextMode = (nextCount + 1) % 4 === 0 ? 'longBreak' : 'shortBreak'
+                            // Auto-switch mode or stop
+                            setMode(nextMode)
+                            return TIMER_CONFIGS[nextMode].minutes * 60
+                        } else {
+                            setMode('focus')
+                            return TIMER_CONFIGS.focus.minutes * 60
+                        }
+                    }
+                    return prev - 1
+                })
             }, 1000)
-        } else if (timeLeft === 0) {
-            playSound()
-
-            if (mode === 'focus') {
-                setSessionsCompleted((prev) => prev + 1)
-                // Auto switch to break
-                const nextMode = (sessionsCompleted + 1) % 4 === 0 ? 'longBreak' : 'shortBreak'
-                switchMode(nextMode)
-            } else {
-                // Break finished, back to focus
-                switchMode('focus')
-            }
+        } else if (timeLeft === 0 && isRunning) {
+            setIsRunning(false)
         }
 
         return () => {
             if (interval) clearInterval(interval)
         }
-    }, [isRunning, timeLeft, mode, sessionsCompleted, playSound, switchMode])
+    }, [isRunning, timeLeft, mode, sessionsCompleted, playSound])
+
+    // Effect to stop running when mode changes auto-magically if needed, 
+    // but the above refactor handles the switch and resets time.
+    // We need to ensure isRunning stays true or becomes false as desired.
+    // Let's stop the timer when it completes a cycle.
+
+    useEffect(() => {
+        // Reset running state if we switched modes manually or automatically via the interval logic
+        // Actually, if we want auto-transition, the above logic sets new time.
+        // If we want it to PAUSE after a session:
+    }, [])
 
     const toggleTimer = () => setIsRunning(!isRunning)
 

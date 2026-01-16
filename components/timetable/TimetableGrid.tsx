@@ -183,6 +183,7 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
                                         'Sunday': 0, 'Sun': 0
                                     }
 
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                     const classesToInsert = data.classes.map((cls: any) => {
                                         let start = '09:00'
                                         let end = '10:00'
@@ -224,7 +225,7 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
                                         setClasses(prev => [...prev, ...inserted as ClassSchedule[]])
                                         toast.success(`Added ${inserted.length} classes from timetable`)
                                     }
-                                } catch (e) {
+                                } catch (e: unknown) {
                                     console.error('Timetable extract error:', e)
                                     toast.error('Failed to import timetable')
                                 }

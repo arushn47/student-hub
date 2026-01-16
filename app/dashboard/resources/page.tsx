@@ -65,29 +65,28 @@ export default function ResourcesPage() {
     const supabase = createClient()
 
     useEffect(() => {
-        fetchResources()
-    }, [])
+        const fetchResources = async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (!user) return
 
-    const fetchResources = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+                const { data, error } = await supabase
+                    .from('resources')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: false })
 
-            const { data, error } = await supabase
-                .from('resources')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false })
-
-            if (error) throw error
-            setResources(data || [])
-        } catch (error) {
-            console.error('Error fetching resources:', error)
-            toast.error('Failed to load resources')
-        } finally {
-            setLoading(false)
+                if (error) throw error
+                setResources(data || [])
+            } catch (error) {
+                console.error('Error fetching resources:', error)
+                toast.error('Failed to load resources')
+            } finally {
+                setLoading(false)
+            }
         }
-    }
+        fetchResources()
+    }, [supabase])
 
     const addResource = async () => {
         if (!newResource.title || !newResource.url || !newResource.type) {
@@ -221,7 +220,7 @@ export default function ResourcesPage() {
                                     <Label className="text-gray-400">Type</Label>
                                     <select
                                         value={newResource.type}
-                                        onChange={(e) => setNewResource({ ...newResource, type: e.target.value as any })}
+                                        onChange={(e) => setNewResource({ ...newResource, type: e.target.value as Resource['type'] })}
                                         className="w-full h-10 px-3 rounded-md bg-white/5 border border-white/10 text-white mt-1"
                                     >
                                         <option value="link" className="bg-gray-900">Link</option>

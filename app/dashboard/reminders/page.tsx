@@ -43,6 +43,17 @@ export default function RemindersPage() {
         type: 'custom' as const,
     })
 
+    const triggerNotification = (reminder: Reminder) => {
+        if (notificationPermission === 'granted') {
+            new Notification('⏰ Reminder', {
+                body: reminder.title,
+                icon: '/icon.png',
+                tag: reminder.id,
+            })
+        }
+        toast.info(`Reminder: ${reminder.title}`)
+    }
+
     // Check notification permission on mount
     useEffect(() => {
         if ('Notification' in window) {
@@ -105,16 +116,7 @@ export default function RemindersPage() {
         }
     }
 
-    const triggerNotification = (reminder: Reminder) => {
-        if (notificationPermission === 'granted') {
-            new Notification('⏰ Reminder', {
-                body: reminder.title,
-                icon: '/icon.png',
-                tag: reminder.id,
-            })
-        }
-        toast.info(`Reminder: ${reminder.title}`)
-    }
+
 
     const addReminder = () => {
         if (!newReminder.title.trim()) {

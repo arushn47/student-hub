@@ -53,9 +53,10 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({ events })
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Calendar fetch error:', error)
-        return NextResponse.json({ error: error.message || 'Failed to fetch calendar' }, { status: 500 })
+        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch calendar';
+        return NextResponse.json({ error: errorMessage }, { status: 500 })
     }
 }
 
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Title, start, and end are required' }, { status: 400 })
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const eventData: any = {
             summary: title,
             description,
@@ -121,8 +123,9 @@ export async function POST(req: NextRequest) {
             }
         })
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Calendar create error:', error)
-        return NextResponse.json({ error: error.message || 'Failed to create event' }, { status: 500 })
+        const errorMessage = error instanceof Error ? error.message : 'Failed to create event';
+        return NextResponse.json({ error: errorMessage }, { status: 500 })
     }
 }

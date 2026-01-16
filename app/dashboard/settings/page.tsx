@@ -60,10 +60,6 @@ export default function SettingsPage() {
         }
     }, [searchParams])
 
-    useEffect(() => {
-        loadProfile()
-    }, [])
-
     const loadProfile = async () => {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
@@ -115,6 +111,12 @@ export default function SettingsPage() {
         }
         setLoading(false)
     }
+
+    useEffect(() => {
+        loadProfile()
+    }, [])
+
+
 
     const updateProfile = async (updates: Partial<UserProfile>) => {
         setSaving(true)

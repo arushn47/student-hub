@@ -85,49 +85,49 @@ export default function BudgetPage() {
     const supabase = createClient()
 
     useEffect(() => {
-        fetchData()
-    }, [])
+        const fetchData = async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (!user) return
 
-    const fetchData = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+                // 1. Fetch Expenses
+                const { data: expensesData, error: expensesError } = await supabase
+                    .from('expenses')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('expense_date', { ascending: false })
 
-            // 1. Fetch Expenses
-            const { data: expensesData, error: expensesError } = await supabase
-                .from('expenses')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('expense_date', { ascending: false })
+                if (expensesError) {
+                    console.error('Error fetching expenses:', expensesError)
+                    throw new Error(expensesError.message || JSON.stringify(expensesError))
+                }
+                setExpenses(expensesData || [])
 
-            if (expensesError) {
-                console.error('Error fetching expenses:', expensesError)
-                throw new Error(expensesError.message || JSON.stringify(expensesError))
+                // 2. Fetch Budget (Graceful handling)
+                const { data: profileData, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('monthly_budget')
+                    .eq('id', user.id)
+                    .single()
+
+                if (profileError) {
+                    console.warn('Could not fetch budget (using default 0):', profileError)
+                }
+
+                if (profileData?.monthly_budget) {
+                    setMonthlyBudget(Number(profileData.monthly_budget))
+                }
+
+            } catch (error: unknown) {
+                console.error('Error fetching data:', error)
+                const errorMessage = error instanceof Error ? error.message : 'Failed to load budget data';
+                toast.error(errorMessage)
+            } finally {
+                setLoading(false)
             }
-            setExpenses(expensesData || [])
-
-            // 2. Fetch Budget (Graceful handling)
-            const { data: profileData, error: profileError } = await supabase
-                .from('profiles')
-                .select('monthly_budget')
-                .eq('id', user.id)
-                .single()
-
-            if (profileError) {
-                console.warn('Could not fetch budget (using default 0):', profileError)
-            }
-
-            if (profileData?.monthly_budget) {
-                setMonthlyBudget(Number(profileData.monthly_budget))
-            }
-
-        } catch (error: any) {
-            console.error('Error fetching data:', error)
-            toast.error(error.message || 'Failed to load budget data')
-        } finally {
-            setLoading(false)
         }
-    }
+        fetchData()
+    }, [supabase])
 
     const updateBudget = async () => {
         const amount = parseFloat(tempBudget)
@@ -271,9 +271,10 @@ export default function BudgetPage() {
             } else {
                 toast.error('Could not extract amount from text')
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Parse error:', error)
-            toast.error(error.message || 'Failed to parse text')
+            const errorMessage = error instanceof Error ? error.message : 'Failed to parse text';
+            toast.error(errorMessage)
         } finally {
             setIsParsing(false)
         }

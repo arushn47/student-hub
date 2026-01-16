@@ -10,10 +10,8 @@ import {
     Plus,
     Search,
     Layers,
-    Play,
     MoreHorizontal,
     Clock,
-    Sparkles,
     BookOpen,
     Brain,
     Loader2
@@ -53,29 +51,28 @@ export default function FlashcardsPage() {
     const supabase = createClient()
 
     useEffect(() => {
-        fetchDecks()
-    }, [])
+        const fetchDecks = async () => {
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (!user) return
 
-    const fetchDecks = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+                const { data, error } = await supabase
+                    .from('flashcard_decks')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: false })
 
-            const { data, error } = await supabase
-                .from('flashcard_decks')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false })
-
-            if (error) throw error
-            setDecks(data || [])
-        } catch (error) {
-            console.error('Error fetching decks:', error)
-            toast.error('Failed to load flashcard decks')
-        } finally {
-            setLoading(false)
+                if (error) throw error
+                setDecks(data || [])
+            } catch (error) {
+                console.error('Error fetching decks:', error)
+                toast.error('Failed to load flashcard decks')
+            } finally {
+                setLoading(false)
+            }
         }
-    }
+        fetchDecks()
+    }, [supabase])
 
     const createDeck = async () => {
         if (!newDeckName.trim()) return
@@ -164,6 +161,7 @@ export default function FlashcardsPage() {
                                     if (deckError) throw deckError
 
                                     // 2. Create Cards
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                     const cardsToInsert = data.flashcards.map((c: any) => ({
                                         deck_id: deck.id,
                                         user_id: user.id,

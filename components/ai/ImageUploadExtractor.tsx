@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 
 interface ImageUploadExtractorProps {
     type: 'grades' | 'flashcards' | 'timetable' | 'expenses'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onExtract: (data: any) => void
     trigger?: React.ReactNode
     title?: string
@@ -70,9 +71,10 @@ export function ImageUploadExtractor({
             } else {
                 toast.error('No data found in response')
             }
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('Extraction error:', error)
-            toast.error('Failed to analyze image. Please try again.')
+            const errorMessage = error instanceof Error ? error.message : 'Failed to analyze image';
+            toast.error(errorMessage)
         } finally {
             setLoading(false)
         }

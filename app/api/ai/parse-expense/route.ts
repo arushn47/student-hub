@@ -52,8 +52,9 @@ Return ONLY valid JSON:
             return NextResponse.json({ error: 'Failed to parse response' }, { status: 500 })
         }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Parse expense error:', error)
-        return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 })
+        const errorMessage = error instanceof Error ? error.message : 'Internal error';
+        return NextResponse.json({ error: errorMessage }, { status: 500 })
     }
 }

@@ -96,15 +96,18 @@ For VIT India grades: O/S = 10, A = 9, B = 8, C = 7, D = 6, E = 5, F = 0`
             return NextResponse.json({ error: 'Failed to parse AI response', raw: responseText }, { status: 500 })
         }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Extraction API Error:', error)
         // Check for 429/Quota errors from Google
-        if (error.message?.includes('429') || error.status === 429) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const isQuotaError = errorMessage.includes('429') || (error as any)?.status === 429;
+
+        if (isQuotaError) {
             return NextResponse.json(
                 { error: 'AI Quota Exceeded. Please try again later or check your API limit.' },
                 { status: 429 }
             )
         }
-        return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 })
+        return NextResponse.json({ error: errorMessage || 'Internal Server Error' }, { status: 500 })
     }
 }

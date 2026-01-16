@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getTasksClient, GoogleTokens } from '@/lib/google'
 
 // GET: Fetch tasks from Google Tasks (all lists)
-export async function GET(req: NextRequest) {
+export async function GET() {
     try {
         const supabase = await createClient()
         const { data: { user } } = await supabase.auth.getUser()
@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
         }
 
         // Fetch tasks from ALL lists
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const allTasks: any[] = []
 
         for (const list of taskLists) {
@@ -65,9 +66,10 @@ export async function GET(req: NextRequest) {
         console.log('Total tasks fetched:', allTasks.length)
         return NextResponse.json({ tasks: allTasks, taskLists: taskLists.map(l => ({ id: l.id, title: l.title })) })
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Tasks fetch error:', error)
-        return NextResponse.json({ error: error.message || 'Failed to fetch tasks' }, { status: 500 })
+        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch tasks';
+        return NextResponse.json({ error: errorMessage }, { status: 500 })
     }
 }
 
@@ -128,9 +130,10 @@ export async function POST(req: NextRequest) {
             }
         })
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Task create error:', error)
-        return NextResponse.json({ error: error.message || 'Failed to create task' }, { status: 500 })
+        const errorMessage = error instanceof Error ? error.message : 'Failed to create task';
+        return NextResponse.json({ error: errorMessage }, { status: 500 })
     }
 }
 
@@ -179,8 +182,9 @@ export async function PATCH(req: NextRequest) {
             }
         })
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Task update error:', error)
-        return NextResponse.json({ error: error.message || 'Failed to update task' }, { status: 500 })
+        const errorMessage = error instanceof Error ? error.message : 'Failed to update task';
+        return NextResponse.json({ error: errorMessage }, { status: 500 })
     }
 }

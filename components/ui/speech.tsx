@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Mic, MicOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -18,8 +18,7 @@ const isSpeechRecognitionSupported = typeof window !== 'undefined' &&
 
 export function SpeechToTextButton({ onTranscript, className, disabled }: SpeechToTextButtonProps) {
     const [isListening, setIsListening] = useState(false)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [recognition, setRecognition] = useState<any>(null)
+    const recognitionRef = useRef<any>(null)
 
     useEffect(() => {
         if (!isSpeechRecognitionSupported) return
@@ -69,7 +68,7 @@ export function SpeechToTextButton({ onTranscript, className, disabled }: Speech
             setIsListening(false)
         }
 
-        setRecognition(recognitionInstance)
+        recognitionRef.current = recognitionInstance
 
         return () => {
             recognitionInstance.abort()
@@ -77,24 +76,24 @@ export function SpeechToTextButton({ onTranscript, className, disabled }: Speech
     }, [onTranscript])
 
     const toggleListening = useCallback(() => {
-        if (!recognition) {
+        if (!recognitionRef.current) {
             toast.error('Speech recognition not supported in this browser')
             return
         }
 
         if (isListening) {
-            recognition.stop()
+            recognitionRef.current.stop()
             setIsListening(false)
         } else {
             try {
-                recognition.start()
+                recognitionRef.current.start()
                 setIsListening(true)
                 toast.info('🎤 Listening... Speak now!')
             } catch (e) {
                 // Already started
             }
         }
-    }, [recognition, isListening])
+    }, [isListening])
 
     if (!isSpeechRecognitionSupported) {
         return null
