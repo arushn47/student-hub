@@ -1,26 +1,604 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================
+   STUDENT HUB v2.0 - DESIGN SYSTEM
+   Modern glassmorphism with vibrant gradients
+   ============================================ */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --radius: 0.75rem;
+  --background: oklch(0.98 0 0);
+  --foreground: oklch(0.12 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.12 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.12 0 0);
+  --primary: oklch(0.55 0.25 280);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.96 0.01 280);
+  --secondary-foreground: oklch(0.25 0.05 280);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.96 0.02 320);
+  --accent-foreground: oklch(0.25 0.05 320);
+  --destructive: oklch(0.55 0.22 25);
+  --border: oklch(0.9 0 0);
+  --input: oklch(0.9 0 0);
+  --ring: oklch(0.55 0.25 280);
+  --chart-1: oklch(0.55 0.25 280);
+  --chart-2: oklch(0.65 0.2 320);
+  --chart-3: oklch(0.6 0.15 200);
+  --chart-4: oklch(0.7 0.18 80);
+  --chart-5: oklch(0.6 0.22 350);
+  --sidebar: oklch(0.98 0 0);
+  --sidebar-foreground: oklch(0.12 0 0);
+  --sidebar-primary: oklch(0.55 0.25 280);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.96 0.01 280);
+  --sidebar-accent-foreground: oklch(0.25 0 0);
+  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-ring: oklch(0.55 0.25 280);
+}
+
+.dark {
+  --background: oklch(0.08 0.015 280);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.12 0.02 280);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.12 0.02 280);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.7 0.2 280);
+  --primary-foreground: oklch(0.12 0.02 280);
+  --secondary: oklch(0.18 0.03 280);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.2 0.02 280);
+  --muted-foreground: oklch(0.65 0 0);
+  --accent: oklch(0.22 0.04 320);
+  --accent-foreground: oklch(0.97 0 0);
+  --destructive: oklch(0.6 0.2 25);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.7 0.2 280);
+  --chart-1: oklch(0.7 0.2 280);
+  --chart-2: oklch(0.75 0.18 320);
+  --chart-3: oklch(0.65 0.15 200);
+  --chart-4: oklch(0.75 0.16 80);
+  --chart-5: oklch(0.7 0.2 350);
+  --sidebar: oklch(0.1 0.02 280);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-primary: oklch(0.7 0.2 280);
+  --sidebar-primary-foreground: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.18 0.03 280);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.7 0.2 280);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  /* Light mode text color overrides - fix hardcoded dark mode colors */
+  :root:not(.dark) .text-white {
+    color: var(--foreground) !important;
+  }
+
+  :root:not(.dark) .text-gray-100,
+  :root:not(.dark) .text-gray-200,
+  :root:not(.dark) .text-gray-300 {
+    color: oklch(0.25 0 0) !important;
+  }
+
+  :root:not(.dark) .text-gray-400,
+  :root:not(.dark) .text-gray-500 {
+    color: var(--muted-foreground) !important;
+  }
+
+  :root:not(.dark) .text-gray-600,
+  :root:not(.dark) .text-gray-700,
+  :root:not(.dark) .text-gray-800 {
+    color: oklch(0.35 0 0) !important;
+  }
+
+  /* Light mode background overrides */
+  :root:not(.dark) .bg-gray-900,
+  :root:not(.dark) .bg-gray-800 {
+    background-color: var(--card) !important;
+    border-color: var(--border) !important;
+  }
+
+  :root:not(.dark) .bg-black {
+    background-color: var(--background) !important;
+  }
+
+  :root:not(.dark) [class*="bg-black/"],
+  :root:not(.dark) [class*="bg-white/"] {
+    background-color: oklch(0 0 0 / 5%) !important;
+  }
+
+  /* Light mode border overrides */
+  :root:not(.dark) [class*="border-white/"] {
+    border-color: var(--border) !important;
+  }
+
+  /* Fix gradient backgrounds in light mode - ensure dark text */
+  :root:not(.dark) [class*="bg-gradient-to"],
+  :root:not(.dark) [class*="from-"] {
+    color: oklch(0.2 0 0) !important;
+  }
+
+  /* Ensure text on colored backgrounds is visible in light mode */
+  :root:not(.dark) [class*="bg-purple-"],
+  :root:not(.dark) [class*="bg-violet-"],
+  :root:not(.dark) [class*="bg-pink-"],
+  :root:not(.dark) [class*="bg-rose-"],
+  :root:not(.dark) [class*="bg-fuchsia-"] {
+    color: oklch(0.2 0.05 300) !important;
+  }
+
+  :root:not(.dark) [class*="bg-blue-"],
+  :root:not(.dark) [class*="bg-cyan-"],
+  :root:not(.dark) [class*="bg-sky-"],
+  :root:not(.dark) [class*="bg-indigo-"] {
+    color: oklch(0.25 0.05 240) !important;
+  }
+
+  :root:not(.dark) [class*="bg-green-"],
+  :root:not(.dark) [class*="bg-emerald-"],
+  :root:not(.dark) [class*="bg-teal-"] {
+    color: oklch(0.25 0.05 150) !important;
+  }
+
+  :root:not(.dark) [class*="bg-yellow-"],
+  :root:not(.dark) [class*="bg-amber-"],
+  :root:not(.dark) [class*="bg-orange-"] {
+    color: oklch(0.25 0.05 60) !important;
+  }
+
+  :root:not(.dark) [class*="bg-red-"] {
+    color: oklch(0.25 0.05 25) !important;
+  }
+
+  /* Fix table row backgrounds in light mode */
+  :root:not(.dark) tr[class*="bg-"],
+  :root:not(.dark) [class*="bg-gradient"] .text-white,
+  :root:not(.dark) [class*="from-purple"] .text-white,
+  :root:not(.dark) [class*="from-violet"] .text-white {
+    color: oklch(0.15 0 0) !important;
+  }
+
+  /* Fix text with opacity (text-white/90, text-white/80, etc.) */
+  :root:not(.dark) [class*="text-white/"] {
+    color: oklch(0.15 0 0) !important;
+  }
+
+  /* Fix glass-card class in light mode */
+  :root:not(.dark) .glass-card {
+    background-color: white !important;
+    border-color: oklch(0.9 0 0) !important;
+    box-shadow: 0 4px 6px -1px oklch(0 0 0 / 10%), 0 2px 4px -2px oklch(0 0 0 / 10%) !important;
+  }
+
+  /* Force dark text on items with inline background colors */
+  :root:not(.dark) [style*="background-color"] {
+    color: oklch(0.2 0 0) !important;
+  }
+
+  :root:not(.dark) [style*="background-color"] * {
+    color: oklch(0.2 0 0) !important;
+  }
+
+  /* Fix text selection color in light mode */
+  :root:not(.dark) ::selection {
+    background-color: oklch(0.85 0.1 280) !important;
+    color: oklch(0.2 0 0) !important;
+  }
+
+  :root:not(.dark) ::-moz-selection {
+    background-color: oklch(0.85 0.1 280) !important;
+    color: oklch(0.2 0 0) !important;
+  }
+
+  /* Fix SVG icons that turn white on hover in light mode */
+  :root:not(.dark) svg {
+    color: inherit !important;
+  }
+
+  :root:not(.dark) [data-radix-popper-content-wrapper] svg,
+  :root:not(.dark) [role="listbox"] svg,
+  :root:not(.dark) button svg {
+    color: currentColor !important;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ============================================
+   CUSTOM UTILITIES
+   ============================================ */
+
+@layer utilities {
+
+  /* Glassmorphism */
+  .glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10;
+  }
+
+  .glass-card {
+    @apply bg-white/[0.03] backdrop-blur-2xl border border-white/[0.08] shadow-xl shadow-black/5;
+  }
+
+  .glass-hover {
+    @apply hover:bg-white/[0.08] hover:border-white/[0.15] transition-all duration-300;
+  }
+
+  /* Gradient Text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-violet-400 via-purple-400 to-fuchsia-400 bg-clip-text text-transparent;
+  }
+
+  .gradient-text-warm {
+    @apply bg-gradient-to-r from-amber-400 via-orange-400 to-rose-400 bg-clip-text text-transparent;
+  }
+
+  /* Gradient Backgrounds */
+  .gradient-primary {
+    @apply bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600;
+  }
+
+  .gradient-secondary {
+    @apply bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-500;
+  }
+
+  .gradient-warm {
+    @apply bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500;
+  }
+
+  .gradient-success {
+    @apply bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500;
+  }
+
+  /* Gradient Borders */
+  .gradient-border {
+    @apply relative;
+    background: linear-gradient(var(--background), var(--background)) padding-box,
+      linear-gradient(135deg, oklch(0.7 0.2 280), oklch(0.7 0.2 320)) border-box;
+    border: 1px solid transparent;
+  }
+
+  /* Glow Effects */
+  .glow-sm {
+    box-shadow: 0 0 20px -5px oklch(0.7 0.2 280 / 30%);
+  }
+
+  .glow-md {
+    box-shadow: 0 0 40px -10px oklch(0.7 0.2 280 / 40%);
+  }
+
+  .glow-lg {
+    box-shadow: 0 0 60px -15px oklch(0.7 0.2 280 / 50%);
+  }
+
+  /* Animated Background Gradient */
+  .animated-gradient {
+    background: linear-gradient(135deg,
+        oklch(0.08 0.02 280),
+        oklch(0.12 0.04 300),
+        oklch(0.08 0.02 320),
+        oklch(0.06 0.02 280));
+    background-size: 400% 400%;
+    animation: gradient-shift 15s ease infinite;
+  }
+
+  /* Shimmer Effect */
+  .shimmer {
+    @apply relative overflow-hidden;
+  }
+
+  .shimmer::after {
+    content: '';
+    @apply absolute inset-0;
+    background: linear-gradient(90deg,
+        transparent,
+        oklch(1 0 0 / 5%),
+        transparent);
+    animation: shimmer 2s infinite;
+  }
+
+  /* Card Variants */
+  .card-elevated {
+    @apply bg-card/80 backdrop-blur-xl border border-white/[0.06] shadow-lg shadow-black/10 hover:shadow-xl hover:shadow-black/20 hover:border-white/[0.1] transition-all duration-300;
+  }
+
+  .card-interactive {
+    @apply bg-card/80 backdrop-blur-xl border border-white/[0.06] shadow-lg shadow-black/10 hover:shadow-xl hover:shadow-black/20 hover:border-white/[0.1] transition-all duration-300 cursor-pointer hover:translate-y-[-2px] active:translate-y-0 hover:bg-white/[0.06];
+  }
+
+  /* Status Colors */
+  .status-success {
+    @apply text-emerald-400 bg-emerald-500/10 border-emerald-500/30;
+  }
+
+  .status-warning {
+    @apply text-amber-400 bg-amber-500/10 border-amber-500/30;
+  }
+
+  .status-error {
+    @apply text-rose-400 bg-rose-500/10 border-rose-500/30;
+  }
+
+  .status-info {
+    @apply text-sky-400 bg-sky-500/10 border-sky-500/30;
+  }
+
+  /* Priority Badges */
+  .priority-high {
+    @apply bg-rose-500/15 text-rose-400 border border-rose-500/30;
+  }
+
+  .priority-medium {
+    @apply bg-amber-500/15 text-amber-400 border border-amber-500/30;
+  }
+
+  .priority-low {
+    @apply bg-emerald-500/15 text-emerald-400 border border-emerald-500/30;
+  }
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes gradient-shift {
+
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 20px -5px oklch(0.7 0.2 280 / 40%);
+  }
+
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 40px -5px oklch(0.7 0.2 280 / 60%);
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes bounce-subtle {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+/* Animation Classes */
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 2s ease-in-out infinite;
+}
+
+/* ============================================
+   SCROLLBAR STYLING
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.4 0 0 / 30%);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.5 0 0 / 40%);
+}
+
+/* ============================================
+   SELECTION STYLING
+   ============================================ */
+
+::selection {
+  background: oklch(0.7 0.2 280 / 30%);
+  color: white;
+}
+
+/* ============================================
+   FOCUS RING STYLING
+   ============================================ */
+
+:focus-visible {
+  outline: 2px solid oklch(0.7 0.2 280);
+  outline-offset: 2px;
+}
+
+/* ============================================
+   TIPTAP TASK LIST styling
+   ============================================ */
+ul[data-type="taskList"] {
+  list-style: none;
+  padding: 0 !important;
+  margin: 0.5rem 0 !important;
+}
+
+li[data-type="taskItem"] {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+li[data-type="taskItem"]>label {
+  display: inline-flex !important;
+  align-items: center !important;
+  flex-shrink: 0;
+  margin-right: 0.5rem;
+}
+
+li[data-type="taskItem"]>div {
+  flex: 1;
+  display: inline;
+}
+
+/* Custom Checkbox Style */
+li[data-type="taskItem"] input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: transparent;
+  margin: 0;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  border: 2px solid rgba(168, 85, 247, 0.6);
+  border-radius: 4px;
+  display: inline-grid;
+  place-content: center;
+  vertical-align: middle;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+li[data-type="taskItem"] input[type="checkbox"]:hover {
+  border-color: rgba(168, 85, 247, 1);
+  background-color: rgba(168, 85, 247, 0.1);
+}
+
+li[data-type="taskItem"] input[type="checkbox"]::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  transform: scale(0);
+  transition: 150ms transform cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: white;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+li[data-type="taskItem"] input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, #a855f7, #ec4899);
+  border-color: transparent;
+}
+
+li[data-type="taskItem"] input[type="checkbox"]:checked::before {
+  transform: scale(1);
+}
+
+li[data-type="taskItem"][data-checked="true"]>div {
+  text-decoration: line-through;
+  color: var(--muted-foreground);
+  opacity: 0.6;
 }
