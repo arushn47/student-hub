@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Settings, User, Bell, Palette, Shield, Loader2, Check, Camera, Link2, Unlink } from 'lucide-react'
+import { Settings, User, Bell, Palette, Shield, Loader2, Link2, Unlink } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTheme } from 'next-themes'
 
@@ -61,7 +61,7 @@ export default function SettingsPage() {
         }
     }, [searchParams])
 
-    const loadProfile = async () => {
+    const loadProfile = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
@@ -113,11 +113,13 @@ export default function SettingsPage() {
             })
         }
         setLoading(false)
-    }
+    }, [supabase])
 
     useEffect(() => {
+        // This is a valid pattern - loading initial data on mount
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadProfile()
-    }, [])
+    }, [loadProfile])
 
 
 
@@ -379,7 +381,7 @@ export default function SettingsPage() {
                                         const res = await fetch('/api/auth/google')
                                         const { authUrl } = await res.json()
                                         window.location.href = authUrl
-                                    } catch (e) {
+                                    } catch {
                                         toast.error('Failed to start Google connection')
                                         setConnectingGoogle(false)
                                     }

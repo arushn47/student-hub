@@ -64,7 +64,6 @@ export default function RemindersPage() {
                 ...r,
                 datetime: new Date(r.datetime)
             }))
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setReminders(parsed)
         }
     }, [])
@@ -95,7 +94,8 @@ export default function RemindersPage() {
         checkReminders() // Check immediately
 
         return () => clearInterval(interval)
-    }, [])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [notificationPermission])
 
     const requestPermission = async () => {
         if (!('Notification' in window)) {

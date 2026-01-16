@@ -133,7 +133,8 @@ export default function ResourcesPage() {
         return matchesSearch && matchesType
     })
 
-    const courses = Array.from(new Set(resources.map(r => r.course)))
+    // Unique courses list - reserved for potential category grouping feature
+    // const courses = Array.from(new Set(resources.map(r => r.course)))
 
     if (loading) {
         return (

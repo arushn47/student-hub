@@ -30,8 +30,7 @@ import {
     HelpCircle,
     Undo,
     Redo,
-    Loader2,
-    MoreVertical
+    Loader2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Note, QuizQuestion } from '@/types'

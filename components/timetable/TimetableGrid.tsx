@@ -199,7 +199,7 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
 
                                                     start = clean(parts[0])
                                                     end = clean(parts[1])
-                                                } catch (e) { }
+                                                } catch { }
                                             }
                                         }
 

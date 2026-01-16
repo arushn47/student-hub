@@ -3,12 +3,9 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import {
-    Plus,
     Timer,
-    BookOpen,
     FileText,
     CheckSquare,
-    Calendar,
     Layers
 } from 'lucide-react'
 

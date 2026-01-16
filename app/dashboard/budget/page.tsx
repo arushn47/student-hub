@@ -189,7 +189,7 @@ export default function BudgetPage() {
             setShowAddMoney(false)
             setAddMoneyAmount('')
             toast.success(`Added ₹${amount.toLocaleString()} to balance!`)
-        } catch (error) {
+        } catch {
             toast.error('Failed to add money')
         } finally {
             setIsSavingBudget(false)

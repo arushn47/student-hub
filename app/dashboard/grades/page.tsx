@@ -201,7 +201,7 @@ export default function GradesPage() {
             if (error) throw error
             setCourses(courses.filter((c) => c.id !== id))
             toast.success('Course removed')
-        } catch (error) {
+        } catch {
             toast.error('Failed to remove course')
         }
     }
@@ -219,7 +219,7 @@ export default function GradesPage() {
                 c.id === id ? { ...c, semester: newSemester } : c
             ))
             toast.success('Semester updated')
-        } catch (error) {
+        } catch {
             toast.error('Failed to update semester')
         }
     }
@@ -254,7 +254,7 @@ export default function GradesPage() {
             })
 
             toast.success(`Renamed "${oldSemester}" to "${newSemester}"`)
-        } catch (error) {
+        } catch {
             toast.error('Failed to rename semester')
         }
     }
@@ -275,7 +275,7 @@ export default function GradesPage() {
             setCourses([])
             setOpenSemesters({})
             toast.success('All courses cleared')
-        } catch (error) {
+        } catch {
             toast.error('Failed to clear courses')
         }
     }
