@@ -73,8 +73,6 @@ export default function PomodoroPage() {
                     return prev - 1
                 })
             }, 1000)
-        } else if (timeLeft === 0 && isRunning) {
-            setIsRunning(false)
         }
 
         return () => {

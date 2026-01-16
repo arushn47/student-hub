@@ -54,7 +54,8 @@ export default function SettingsPage() {
 
         if (googleConnectedParam === 'true') {
             toast.success('Google account connected!')
-            setGoogleConnected(true)
+            // Delay state update to avoid sync render warning
+            setTimeout(() => setGoogleConnected(true), 0)
         } else if (googleError) {
             toast.error(`Google connection failed: ${googleError}`)
         }
@@ -64,11 +65,13 @@ export default function SettingsPage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        let { data, error } = await supabase
+        const { data: initialData, error } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', user.id)
             .single()
+
+        let data = initialData
 
         // If profile doesn't exist, create it
         if (error && error.code === 'PGRST116') {

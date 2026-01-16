@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -21,7 +20,6 @@ import {
 import { Bell, BellOff, Plus, Trash2, Clock, Calendar } from 'lucide-react'
 import { toast } from 'sonner'
 import { format, addMinutes, addHours, addDays, isPast } from 'date-fns'
-import { cn } from '@/lib/utils'
 
 interface Reminder {
     id: string
@@ -33,7 +31,9 @@ interface Reminder {
 
 export default function RemindersPage() {
     const [reminders, setReminders] = useState<Reminder[]>([])
-    const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default')
+    const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+        typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
+    )
     const [dialogOpen, setDialogOpen] = useState(false)
     const [newReminder, setNewReminder] = useState({
         title: '',
@@ -55,11 +55,8 @@ export default function RemindersPage() {
     }
 
     // Check notification permission on mount
+    // Check notification permission on mount
     useEffect(() => {
-        if ('Notification' in window) {
-            setNotificationPermission(Notification.permission)
-        }
-
         // Load reminders from localStorage
         const saved = localStorage.getItem('reminders')
         if (saved) {
@@ -67,6 +64,7 @@ export default function RemindersPage() {
                 ...r,
                 datetime: new Date(r.datetime)
             }))
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setReminders(parsed)
         }
     }, [])
@@ -76,25 +74,28 @@ export default function RemindersPage() {
         localStorage.setItem('reminders', JSON.stringify(reminders))
     }, [reminders])
 
-    // Check for due reminders every minute
+    // Check for due reminders every 30 seconds
     useEffect(() => {
         const checkReminders = () => {
-            const now = new Date()
-            reminders.forEach(reminder => {
-                if (!reminder.notified && isPast(reminder.datetime)) {
-                    triggerNotification(reminder)
-                    setReminders(prev => prev.map(r =>
-                        r.id === reminder.id ? { ...r, notified: true } : r
-                    ))
-                }
+            setReminders(prev => {
+                let hasChanges = false
+                const next = prev.map(reminder => {
+                    if (!reminder.notified && isPast(reminder.datetime)) {
+                        triggerNotification(reminder)
+                        hasChanges = true
+                        return { ...reminder, notified: true }
+                    }
+                    return reminder
+                })
+                return hasChanges ? next : prev
             })
         }
 
-        const interval = setInterval(checkReminders, 30000) // Check every 30 seconds
+        const interval = setInterval(checkReminders, 30000)
         checkReminders() // Check immediately
 
         return () => clearInterval(interval)
-    }, [reminders])
+    }, [])
 
     const requestPermission = async () => {
         if (!('Notification' in window)) {

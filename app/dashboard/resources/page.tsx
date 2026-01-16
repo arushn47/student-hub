@@ -13,10 +13,7 @@ import {
     Link as LinkIcon,
     Image as ImageIcon,
     Video,
-    MoreVertical,
-    Download,
     ExternalLink,
-    Filter,
     FolderOpen,
     Loader2
 } from 'lucide-react'

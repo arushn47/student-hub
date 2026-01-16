@@ -18,6 +18,7 @@ const isSpeechRecognitionSupported = typeof window !== 'undefined' &&
 
 export function SpeechToTextButton({ onTranscript, className, disabled }: SpeechToTextButtonProps) {
     const [isListening, setIsListening] = useState(false)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const recognitionRef = useRef<any>(null)
 
     useEffect(() => {
@@ -89,7 +90,7 @@ export function SpeechToTextButton({ onTranscript, className, disabled }: Speech
                 recognitionRef.current.start()
                 setIsListening(true)
                 toast.info('🎤 Listening... Speak now!')
-            } catch (e) {
+            } catch {
                 // Already started
             }
         }

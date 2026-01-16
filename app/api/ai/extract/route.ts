@@ -100,7 +100,7 @@ For VIT India grades: O/S = 10, A = 9, B = 8, C = 7, D = 6, E = 5, F = 0`
         console.error('Extraction API Error:', error)
         // Check for 429/Quota errors from Google
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const isQuotaError = errorMessage.includes('429') || (error as any)?.status === 429;
+        const isQuotaError = errorMessage.includes('429') || (error as { status?: number })?.status === 429;
 
         if (isQuotaError) {
             return NextResponse.json(
