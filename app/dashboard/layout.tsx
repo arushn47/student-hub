@@ -45,7 +45,7 @@ export default async function DashboardLayout({
                 <header className="md:hidden p-4 border-b border-border bg-card/50 backdrop-blur-2xl flex items-center justify-between shrink-0">
                     <MobileSidebar user={user} />
                     <h1 className="text-lg font-bold text-foreground">
-                        StudyHub
+                        StudentHub
                     </h1>
                     <div className="w-8" />
                 </header>

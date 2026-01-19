@@ -27,12 +27,15 @@ import {
     ChevronLeft,
     ChevronRight,
     Timer,
-    Layers,
+    Target,
     GraduationCap,
     Wallet,
     FolderOpen,
     Sparkles,
-    Bell
+    Bell,
+    ClipboardList,
+    Quote,
+    UserCheck
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -47,15 +50,23 @@ interface SidebarProps {
 }
 
 const navItems = [
+    // Home
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'violet' },
+    // Academics
     { href: '/dashboard/notes', label: 'Notes', icon: FileText, color: 'blue' },
     { href: '/dashboard/tasks', label: 'Tasks', icon: CheckSquare, color: 'emerald' },
-    { href: '/dashboard/pomodoro', label: 'Pomodoro', icon: Timer, color: 'rose' },
-    { href: '/dashboard/flashcards', label: 'Flashcards', icon: Layers, color: 'amber' },
-    { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, color: 'cyan' },
-    { href: '/dashboard/reminders', label: 'Reminders', icon: Bell, color: 'yellow' },
-    { href: '/dashboard/timetable', label: 'Timetable', icon: Clock, color: 'purple' },
+    { href: '/dashboard/assignments', label: 'Assignments', icon: ClipboardList, color: 'indigo' },
+    { href: '/dashboard/exam-prep', label: 'Exam Prep', icon: Target, color: 'amber' },
     { href: '/dashboard/grades', label: 'Grades', icon: GraduationCap, color: 'pink' },
+    { href: '/dashboard/citations', label: 'Citations', icon: Quote, color: 'teal' },
+    // Schedule & Time
+    { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, color: 'cyan' },
+    { href: '/dashboard/timetable', label: 'Timetable', icon: Clock, color: 'purple' },
+    { href: '/dashboard/attendance', label: 'Attendance', icon: UserCheck, color: 'lime' },
+    { href: '/dashboard/settings/semesters', label: 'Semesters', icon: GraduationCap, color: 'fuchsia' },
+    { href: '/dashboard/reminders', label: 'Reminders', icon: Bell, color: 'yellow' },
+    { href: '/dashboard/pomodoro', label: 'Pomodoro', icon: Timer, color: 'rose' },
+    // Utility
     { href: '/dashboard/resources', label: 'Resources', icon: FolderOpen, color: 'orange' },
     { href: '/dashboard/budget', label: 'Budget', icon: Wallet, color: 'green' },
     { href: '/dashboard/settings', label: 'Settings', icon: Settings, color: 'slate' },
@@ -74,6 +85,10 @@ const iconColors: Record<string, string> = {
     orange: 'group-hover:text-orange-400',
     green: 'group-hover:text-green-400',
     slate: 'group-hover:text-slate-400',
+    lime: 'group-hover:text-lime-400',
+    indigo: 'group-hover:text-indigo-400',
+    teal: 'group-hover:text-teal-400',
+    fuchsia: 'group-hover:text-fuchsia-400',
 }
 
 const activeColors: Record<string, string> = {
@@ -89,6 +104,10 @@ const activeColors: Record<string, string> = {
     orange: 'text-orange-400 bg-orange-500/10 border-orange-500/30',
     green: 'text-green-400 bg-green-500/10 border-green-500/30',
     slate: 'text-slate-400 bg-slate-500/10 border-slate-500/30',
+    lime: 'text-lime-400 bg-lime-500/10 border-lime-500/30',
+    indigo: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/30',
+    teal: 'text-teal-400 bg-teal-500/10 border-teal-500/30',
+    fuchsia: 'text-fuchsia-400 bg-fuchsia-500/10 border-fuchsia-500/30',
 }
 
 import NProgress from 'nprogress'
@@ -303,7 +322,7 @@ export function MobileSidebar({ user }: SidebarProps) {
                             <Sparkles className="h-4 w-4 text-white" />
                         </div>
                         <h1 className="text-xl font-bold gradient-text">
-                            StudyHub
+                            StudentHub
                         </h1>
                     </div>
                 </div>

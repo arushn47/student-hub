@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CheckSquare, ArrowRight, Plus } from 'lucide-react'
 import type { Task } from '@/types'
+import { formatDateMDY } from '@/lib/utils'
 
 interface TasksWidgetProps {
     tasks: Task[]
@@ -56,7 +57,7 @@ export function TasksWidget({ tasks }: TasksWidgetProps) {
                                     <p className="text-sm font-medium text-white truncate">{task.title}</p>
                                     {task.due_date && (
                                         <p className="text-xs text-gray-400 mt-1">
-                                            Due: {new Date(task.due_date).toLocaleDateString()}
+                                            Due: {formatDateMDY(task.due_date)}
                                         </p>
                                     )}
                                 </div>

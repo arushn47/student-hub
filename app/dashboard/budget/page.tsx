@@ -33,7 +33,7 @@ import {
     MessageSquare,
     Sparkles
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatDateMDY } from '@/lib/utils'
 import { toast } from 'sonner'
 
 interface Expense {
@@ -725,7 +725,7 @@ export default function BudgetPage() {
                                             </div>
                                             <div>
                                                 <p className="font-medium text-white">{expense.description}</p>
-                                                <p className="text-xs text-gray-400">{new Date(expense.expense_date).toLocaleDateString()}</p>
+                                                <p className="text-xs text-gray-400">{formatDateMDY(expense.expense_date)}</p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-4">

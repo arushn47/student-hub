@@ -65,13 +65,13 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
-            <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]" />
+        <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
+            <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center mask-[linear-gradient(180deg,white,rgba(255,255,255,0))]" />
 
             <Card className="w-full max-w-md relative bg-black/40 backdrop-blur-xl border-white/10">
                 <CardHeader className="space-y-1 text-center">
                     <div className="flex justify-center mb-4">
-                        <div className="p-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
+                        <div className="p-3 rounded-full bg-linear-to-r from-purple-500 to-pink-500">
                             <BookOpen className="h-8 w-8 text-white" />
                         </div>
                     </div>
@@ -84,7 +84,7 @@ export default function LoginPage() {
                 <CardContent className="space-y-4">
                     <Button
                         variant="outline"
-                        className="w-full bg-white hover:bg-gray-100 text-gray-900 border-0"
+                        className="w-full bg-white text-white hover:bg-gray-100  border-0"
                         onClick={handleGoogleLogin}
                         disabled={googleLoading}
                     >
@@ -118,7 +118,7 @@ export default function LoginPage() {
                             <Separator className="w-full bg-white/10" />
                         </div>
                         <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-black/40 px-2 text-gray-500">Or continue with</span>
+                            <span className="bg-black px-2 text-white">Or continue with</span>
                         </div>
                     </div>
 
@@ -149,7 +149,7 @@ export default function LoginPage() {
                         </div>
                         <Button
                             type="submit"
-                            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                            className="w-full bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
                             disabled={loading}
                         >
                             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

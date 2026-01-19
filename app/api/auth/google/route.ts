@@ -1,13 +1,14 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUrl } from '@/lib/google'
 import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/api-utils'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
     try {
         const user = await getAuthenticatedUser()
         if (!user) return unauthorizedResponse()
 
-        const authUrl = getAuthUrl()
+        const redirectUri = new URL('/api/auth/google/callback', req.url).toString()
+        const authUrl = getAuthUrl({ redirectUri })
         return NextResponse.json({ authUrl })
 
     } catch (error) {

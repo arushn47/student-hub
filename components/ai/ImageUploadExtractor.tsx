@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Upload, X, Loader2, Sparkles } from 'lucide-react'
@@ -131,13 +132,18 @@ export function ImageUploadExtractor({
                                     <p className="text-sm text-gray-300">{file.name}</p>
                                 </div>
                             ) : (
-                                <img
-                                    src={selectedImage!}
-                                    alt="Preview"
-                                    className="max-h-full max-w-full object-contain"
-                                />
+                                <div className="relative w-full h-full">
+                                    <Image
+                                        src={selectedImage!}
+                                        alt="Preview"
+                                        fill
+                                        unoptimized
+                                        className="object-contain"
+                                    />
+                                </div>
                             )}
                             <button
+                                type="button"
                                 onClick={reset}
                                 className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
                             >
@@ -166,7 +172,7 @@ export function ImageUploadExtractor({
                         <Button
                             onClick={handleExtract}
                             disabled={!file || loading}
-                            className="gradient-primary text-white gap-2 min-w-[120px]"
+                            className="gradient-primary text-white gap-2 min-w-30"
                         >
                             {loading ? (
                                 <>

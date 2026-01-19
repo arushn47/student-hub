@@ -90,7 +90,7 @@ export default function SignupPage() {
                 <CardContent className="space-y-4">
                     <Button
                         variant="outline"
-                        className="w-full bg-white hover:bg-gray-100 text-gray-900 border-0"
+                        className="w-full bg-white hover:bg-gray-100 text-gray-100 border-0"
                         onClick={handleGoogleSignup}
                         disabled={googleLoading}
                     >
@@ -124,7 +124,7 @@ export default function SignupPage() {
                             <Separator className="w-full bg-white/10" />
                         </div>
                         <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-black/40 px-2 text-gray-500">Or continue with</span>
+                            <span className="bg-black px-2 text-white">Or continue with</span>
                         </div>
                     </div>
 

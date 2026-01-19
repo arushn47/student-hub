@@ -56,10 +56,14 @@ export function SpeechToTextButton({ onTranscript, className, disabled }: Speech
                 setIsListening(false)
                 return
             }
+            if (event.error === 'aborted') {
+                // 'aborted' is normal when user stops - suppress it
+                return
+            }
             console.error('Speech recognition error:', event.error)
             if (event.error === 'not-allowed') {
                 toast.error('Microphone access denied. Please enable it in browser settings.')
-            } else if (event.error !== 'aborted') {
+            } else { // Removed 'else if (event.error !== 'aborted')' as 'aborted' is handled above
                 toast.error('Speech recognition error: ' + event.error)
             }
             setIsListening(false)

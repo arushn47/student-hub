@@ -17,7 +17,7 @@ import {
     FolderOpen,
     Loader2
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatDateMDY } from '@/lib/utils'
 import { toast } from 'sonner'
 
 interface Resource {
@@ -138,7 +138,7 @@ export default function ResourcesPage() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-[400px]">
+            <div className="flex items-center justify-center min-h-100">
                 <Loader2 className="h-8 w-8 text-violet-500 animate-spin" />
             </div>
         )
@@ -301,7 +301,7 @@ function ResourceCard({ resource }: { resource: Resource }) {
     const colorClass = typeColors[resource.type] || typeColors.other
 
     return (
-        <Card className="glass-card border-white/[0.06] hover:border-white/[0.12] transition-colors group">
+        <Card className="glass-card border-white/6 hover:border-white/12 transition-colors group">
             <CardContent className="p-4">
                 <div className="flex items-start gap-4">
                     <div className={cn("p-2.5 rounded-xl shrink-0", colorClass)}>
@@ -314,7 +314,7 @@ function ResourceCard({ resource }: { resource: Resource }) {
                                 {resource.course}
                             </span>
                             <span className="text-xs text-gray-500">•</span>
-                            <span className="text-xs text-gray-500">{new Date(resource.created_at).toLocaleDateString()}</span>
+                            <span className="text-xs text-gray-500">{formatDateMDY(resource.created_at)}</span>
                             {resource.size && (
                                 <>
                                     <span className="text-xs text-gray-500">•</span>

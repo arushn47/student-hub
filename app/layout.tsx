@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Suspense } from "react";
 import { NavigationProgress } from "@/components/navigation-progress";
+import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -45,38 +46,15 @@ export default function RootLayout({
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <style>{`
-          #nprogress {
-            pointer-events: none;
-          }
-          #nprogress .bar {
-            background: linear-gradient(90deg, #a855f7, #ec4899);
-            position: fixed;
-            z-index: 9999;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 3px;
-          }
-          #nprogress .peg {
-            display: block;
-            position: absolute;
-            right: 0px;
-            width: 100px;
-            height: 100%;
-            box-shadow: 0 0 10px #a855f7, 0 0 5px #a855f7;
-            opacity: 1;
-            transform: rotate(3deg) translate(0px, -4px);
-          }
-        `}</style>
       </head>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
           enableSystem
           disableTransitionOnChange
         >
+          <ServiceWorkerRegistration />
           <Suspense fallback={null}>
             <NavigationProgress />
           </Suspense>

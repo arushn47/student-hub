@@ -3,22 +3,26 @@ import { google } from 'googleapis'
 // Environment variables for Google OAuth
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
-const REDIRECT_URI = process.env.NEXT_PUBLIC_APP_URL
-    ? `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google/callback`
-    : 'http://localhost:3000/api/auth/google/callback'
+
+function getDefaultRedirectUri() {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+    return appUrl
+        ? `${appUrl}/api/auth/google/callback`
+        : 'http://localhost:3000/api/auth/google/callback'
+}
 
 // Create OAuth2 client
-export function getOAuth2Client() {
+export function getOAuth2Client(options?: { redirectUri?: string }) {
     return new google.auth.OAuth2(
         GOOGLE_CLIENT_ID,
         GOOGLE_CLIENT_SECRET,
-        REDIRECT_URI
+        options?.redirectUri ?? getDefaultRedirectUri()
     )
 }
 
 // Generate authorization URL
-export function getAuthUrl() {
-    const oauth2Client = getOAuth2Client()
+export function getAuthUrl(options?: { redirectUri?: string }) {
+    const oauth2Client = getOAuth2Client({ redirectUri: options?.redirectUri })
     return oauth2Client.generateAuthUrl({
         access_type: 'offline',
         scope: [

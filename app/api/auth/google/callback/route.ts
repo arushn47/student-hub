@@ -18,7 +18,8 @@ export async function GET(req: NextRequest) {
         }
 
         // Exchange code for tokens
-        const oauth2Client = getOAuth2Client()
+        const redirectUri = new URL('/api/auth/google/callback', req.url).toString()
+        const oauth2Client = getOAuth2Client({ redirectUri })
         const { tokens } = await oauth2Client.getToken(code)
 
         // Get authenticated user

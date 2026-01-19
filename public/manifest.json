@@ -48,11 +48,11 @@
             ]
         },
         {
-            "name": "Pomodoro",
-            "url": "/dashboard/pomodoro",
+            "name": "Exam Prep",
+            "url": "/dashboard/exam-prep",
             "icons": [
                 {
-                    "src": "/icons/pomodoro.png",
+                    "src": "/icons/icon-192.png",
                     "sizes": "96x96"
                 }
             ]

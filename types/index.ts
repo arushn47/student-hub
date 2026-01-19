@@ -45,6 +45,40 @@ export interface ClassSchedule {
     day_of_week: 0 | 1 | 2 | 3 | 4 | 5 | 6
     start_time: string
     end_time: string
+    semester_id: string | null
+    created_at: string
+}
+
+// Semester
+export interface Semester {
+    id: string
+    user_id: string
+    name: string
+    start_date: string
+    end_date: string
+    is_active: boolean
+    created_at: string
+}
+
+// Semester Break (holidays, exam periods, etc.)
+export interface SemesterBreak {
+    id: string
+    semester_id: string
+    user_id: string
+    name: string
+    start_date: string
+    end_date: string
+    break_type: 'holiday' | 'exam_period' | 'break'
+}
+
+// Attendance Record
+export interface AttendanceRecord {
+    id: string
+    user_id: string
+    class_schedule_id: string | null
+    date: string
+    status: 'present' | 'absent' | 'cancelled'
+    semester_id: string | null
     created_at: string
 }
 

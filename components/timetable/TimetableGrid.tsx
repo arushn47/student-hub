@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,14 +18,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import { Plus, Clock, Trash2 } from 'lucide-react'
-import type { ClassSchedule } from '@/types'
+import { Plus, Clock, Trash2, GraduationCap, Settings } from 'lucide-react'
+import type { ClassSchedule, Semester } from '@/types'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ImageUploadExtractor } from '@/components/ai/ImageUploadExtractor'
+import Link from 'next/link'
 
 interface TimetableGridProps {
     initialClasses: ClassSchedule[]
+    initialSemesters: Semester[]
     userId: string
 }
 
@@ -57,8 +59,10 @@ const colors = [
     '#3b82f6', // Blue
 ]
 
-export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
+export function TimetableGrid({ initialClasses, initialSemesters, userId }: TimetableGridProps) {
     const [classes, setClasses] = useState<ClassSchedule[]>(initialClasses)
+    const [semesters, setSemesters] = useState<Semester[]>(initialSemesters)
+    const [selectedSemester, setSelectedSemester] = useState<string>('all')
     const [createDialog, setCreateDialog] = useState(false)
     const [newClass, setNewClass] = useState({
         name: '',
@@ -70,7 +74,21 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
         start_time: '08:00',
         end_time: '09:00',
     })
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
+
+    // Auto-select active semester on mount
+    useEffect(() => {
+        const activeSemester = semesters.find(s => s.is_active)
+        if (activeSemester) {
+            setSelectedSemester(activeSemester.id)
+        }
+    }, [semesters])
+
+    // Filter classes by selected semester
+    const filteredClasses = useMemo(() => {
+        if (selectedSemester === 'all') return classes
+        return classes.filter(c => c.semester_id === selectedSemester || c.semester_id === null)
+    }, [classes, selectedSemester])
 
     const createClass = async () => {
         if (!newClass.name.trim()) {
@@ -83,6 +101,7 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
             .insert({
                 user_id: userId,
                 ...newClass,
+                semester_id: selectedSemester !== 'all' ? selectedSemester : null,
             })
             .select()
             .single()
@@ -119,6 +138,29 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
         toast.success('Class deleted')
     }
 
+    const clearSchedule = async () => {
+        if (!confirm('Are you sure you want to clear your entire schedule?')) return
+
+        let query = supabase.from('class_schedules').delete().eq('user_id', userId)
+
+        // If a specific semester is selected, only clear that semester's classes
+        if (selectedSemester !== 'all') {
+            query = query.eq('semester_id', selectedSemester)
+        }
+
+        const { error } = await query
+        if (error) {
+            toast.error('Failed to clear schedule')
+        } else {
+            if (selectedSemester !== 'all') {
+                setClasses(prev => prev.filter(c => c.semester_id !== selectedSemester))
+            } else {
+                setClasses([])
+            }
+            toast.success('Schedule cleared')
+        }
+    }
+
     // Horizontal Layout Helper
     const getClassStyleHorizontal = (cls: ClassSchedule) => {
         const [startH, startM] = cls.start_time.split(':').map(Number)
@@ -137,6 +179,8 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
         }
     }
 
+    const selectedSemesterName = semesters.find(s => s.id === selectedSemester)?.name
+
     return (
         <div className="space-y-7">
             {/* Header */}
@@ -150,21 +194,37 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
                         Visualize your weekly schedule
                     </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 items-center">
+                    {/* Semester Selector */}
+                    <div className="flex items-center gap-2">
+                        <GraduationCap className="h-4 w-4 text-muted-foreground" />
+                        <Select value={selectedSemester} onValueChange={setSelectedSemester}>
+                            <SelectTrigger className="w-40 bg-white/5 border-white/10">
+                                <SelectValue placeholder="All Semesters" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-gray-900 border-white/10">
+                                <SelectItem value="all">All Semesters</SelectItem>
+                                {semesters.map((sem) => (
+                                    <SelectItem key={sem.id} value={sem.id}>
+                                        {sem.name} {sem.is_active && '✓'}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Link href="/dashboard/settings/semesters">
+                            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-white">
+                                <Settings className="h-4 w-4" />
+                            </Button>
+                        </Link>
+                    </div>
+
                     <Button
                         variant="outline"
-                        onClick={async () => {
-                            if (!confirm('Are you sure you want to clear your entire schedule?')) return
-                            const { error } = await supabase.from('class_schedules').delete().eq('user_id', userId)
-                            if (error) toast.error('Failed to clear schedule')
-                            else {
-                                setClasses([])
-                                toast.success('Schedule cleared')
-                            }
-                        }}
+                        onClick={clearSchedule}
                         className="text-red-400 border-red-500/30 hover:bg-red-500/10"
                     >
-                        <Trash2 className="mr-2 h-4 w-4" /> Clear All
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        {selectedSemester !== 'all' ? 'Clear Semester' : 'Clear All'}
                     </Button>
                     <ImageUploadExtractor
                         type="timetable"
@@ -210,7 +270,8 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
                                             start_time: start,
                                             end_time: end,
                                             location: cls.location || '',
-                                            color: colors[Math.floor(Math.random() * colors.length)]
+                                            color: colors[Math.floor(Math.random() * colors.length)],
+                                            semester_id: selectedSemester !== 'all' ? selectedSemester : null
                                         }
                                     })
 
@@ -234,16 +295,24 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
                     />
                     <Button
                         onClick={() => setCreateDialog(true)}
-                        className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                        className="bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                     >
                         <Plus className="mr-2 h-4 w-4" /> Add Class
                     </Button>
                 </div>
             </div>
 
+            {/* Semester indicator */}
+            {selectedSemester !== 'all' && selectedSemesterName && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-purple-500/10 px-3 py-2 rounded-lg w-fit">
+                    <GraduationCap className="h-4 w-4 text-purple-400" />
+                    <span>Viewing: <span className="text-purple-400 font-medium">{selectedSemesterName}</span></span>
+                </div>
+            )}
+
             {/* Timetable Grid (Horizontal: Days as Rows) */}
             <div className="overflow-x-auto pb-4 custom-scrollbar">
-                <div className="min-w-[1000px]"> {/* Wide container for time axis */}
+                <div className="min-w-250"> {/* Wide container for time axis */}
 
                     {/* Time Header (X-Axis) */}
                     <div className="flex border-b border-white/10 mb-2">
@@ -260,7 +329,7 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
                     {/* Day Rows */}
                     <div className="space-y-2">
                         {days.map((day) => {
-                            const dayClasses = classes.filter(c => c.day_of_week === day.id)
+                            const dayClasses = filteredClasses.filter(c => c.day_of_week === day.id)
 
                             return (
                                 <div key={day.id} className="flex h-20 relative group"> {/* Fixed height rows (h-20 = 80px) to prevent scroll */}
@@ -270,7 +339,7 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
                                     </div>
 
                                     {/* Timeline Track */}
-                                    <div className="flex-1 bg-white/[0.02] relative rounded-r-lg border border-white/[0.05]">
+                                    <div className="flex-1 bg-white/2 relative rounded-r-lg border border-white/5">
                                         {/* Hour Guides */}
                                         <div className="absolute inset-0 flex pointer-events-none">
                                             {hours.map(h => (
@@ -328,6 +397,11 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
                 <DialogContent className="bg-gray-900 border-white/10 max-w-md">
                     <DialogHeader>
                         <DialogTitle className="text-white">Add Class</DialogTitle>
+                        {selectedSemester !== 'all' && selectedSemesterName && (
+                            <p className="text-xs text-muted-foreground">
+                                Adding to: {selectedSemesterName}
+                            </p>
+                        )}
                     </DialogHeader>
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
@@ -428,7 +502,7 @@ export function TimetableGrid({ initialClasses, userId }: TimetableGridProps) {
                         </div>
                         <Button
                             onClick={createClass}
-                            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                            className="w-full bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                         >
                             Add Class
                         </Button>

@@ -10,6 +10,31 @@ CREATE TABLE public.api_rate_limits (
   CONSTRAINT api_rate_limits_pkey PRIMARY KEY (id),
   CONSTRAINT api_rate_limits_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.assignments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  course text,
+  due_date timestamp with time zone,
+  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'in-progress'::text, 'submitted'::text, 'graded'::text])),
+  grade text,
+  is_group boolean DEFAULT false,
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT assignments_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.attendance_records (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  class_schedule_id uuid,
+  date date NOT NULL,
+  status text DEFAULT 'present'::text CHECK (status = ANY (ARRAY['present'::text, 'absent'::text, 'cancelled'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT attendance_records_pkey PRIMARY KEY (id),
+  CONSTRAINT attendance_records_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT attendance_records_class_schedule_id_fkey FOREIGN KEY (class_schedule_id) REFERENCES public.class_schedules(id)
+);
 CREATE TABLE public.chat_messages (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
@@ -52,6 +77,69 @@ CREATE TABLE public.courses (
   CONSTRAINT courses_pkey PRIMARY KEY (id),
   CONSTRAINT courses_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.exam_flashcards (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  module_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  front text NOT NULL,
+  back text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT exam_flashcards_pkey PRIMARY KEY (id),
+  CONSTRAINT exam_flashcards_module_id_fkey FOREIGN KEY (module_id) REFERENCES public.exam_modules(id),
+  CONSTRAINT exam_flashcards_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.exam_module_files (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  module_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  file_name text NOT NULL,
+  file_path text NOT NULL,
+  file_size integer,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT exam_module_files_pkey PRIMARY KEY (id),
+  CONSTRAINT exam_module_files_module_id_fkey FOREIGN KEY (module_id) REFERENCES public.exam_modules(id),
+  CONSTRAINT exam_module_files_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.exam_modules (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  subject_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  name text NOT NULL,
+  module_number integer NOT NULL,
+  file_path text,
+  file_name text,
+  summary text,
+  status text DEFAULT 'pending'::text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT exam_modules_pkey PRIMARY KEY (id),
+  CONSTRAINT exam_modules_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.exam_subjects(id),
+  CONSTRAINT exam_modules_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.exam_questions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  module_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  question text NOT NULL,
+  answer text NOT NULL,
+  is_most_likely boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT exam_questions_pkey PRIMARY KEY (id),
+  CONSTRAINT exam_questions_module_id_fkey FOREIGN KEY (module_id) REFERENCES public.exam_modules(id),
+  CONSTRAINT exam_questions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.exam_subjects (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  name text NOT NULL,
+  total_modules integer NOT NULL DEFAULT 5,
+  questions_per_module integer DEFAULT 1,
+  marks_per_question integer DEFAULT 10,
+  created_at timestamp with time zone DEFAULT now(),
+  syllabus_path text,
+  exam_type text DEFAULT 'endterm'::text,
+  CONSTRAINT exam_subjects_pkey PRIMARY KEY (id),
+  CONSTRAINT exam_subjects_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.expenses (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
@@ -62,35 +150,6 @@ CREATE TABLE public.expenses (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT expenses_pkey PRIMARY KEY (id),
   CONSTRAINT expenses_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
-);
-CREATE TABLE public.flashcard_decks (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  name text NOT NULL CHECK (char_length(TRIM(BOTH FROM name)) > 0),
-  description text,
-  color text DEFAULT 'purple'::text,
-  card_count integer DEFAULT 0,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT flashcard_decks_pkey PRIMARY KEY (id),
-  CONSTRAINT flashcard_decks_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
-);
-CREATE TABLE public.flashcards (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  deck_id uuid NOT NULL,
-  user_id uuid NOT NULL,
-  front text NOT NULL CHECK (char_length(TRIM(BOTH FROM front)) > 0),
-  back text NOT NULL CHECK (char_length(TRIM(BOTH FROM back)) > 0),
-  ease_factor numeric DEFAULT 2.5,
-  interval_days integer DEFAULT 0,
-  repetitions integer DEFAULT 0,
-  next_review timestamp with time zone DEFAULT now(),
-  last_reviewed timestamp with time zone,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT flashcards_pkey PRIMARY KEY (id),
-  CONSTRAINT flashcards_deck_id_fkey FOREIGN KEY (deck_id) REFERENCES public.flashcard_decks(id),
-  CONSTRAINT flashcards_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.notes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -130,6 +189,8 @@ CREATE TABLE public.profiles (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   monthly_budget numeric DEFAULT 0,
+  google_tokens jsonb,
+  google_connected boolean DEFAULT false,
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
   CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
 );
@@ -145,6 +206,18 @@ CREATE TABLE public.resources (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT resources_pkey PRIMARY KEY (id),
   CONSTRAINT resources_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.saved_citations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  citation_apa text,
+  citation_mla text,
+  citation_chicago text,
+  source_url text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT saved_citations_pkey PRIMARY KEY (id),
+  CONSTRAINT saved_citations_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.tasks (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -163,6 +236,7 @@ CREATE TABLE public.tasks (
   deleted_at timestamp with time zone,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  google_task_id text,
   CONSTRAINT tasks_pkey PRIMARY KEY (id),
   CONSTRAINT tasks_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
   CONSTRAINT tasks_parent_task_id_fkey FOREIGN KEY (parent_task_id) REFERENCES public.tasks(id)
