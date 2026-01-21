@@ -7,6 +7,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -54,6 +64,7 @@ export default function ExamPrepPage() {
     const [loading, setLoading] = useState(true)
     const [creating, setCreating] = useState(false)
     const [dialogOpen, setDialogOpen] = useState(false)
+    const [subjectToDelete, setSubjectToDelete] = useState<string | null>(null)
     const [newSubject, setNewSubject] = useState({
         name: '',
         total_modules: 5,
@@ -76,9 +87,9 @@ export default function ExamPrepPage() {
             const { data, error } = await supabase
                 .from('exam_subjects')
                 .select(`
-                    *,
-                    exam_modules!inner(id, status)
-                `)
+                *,
+                exam_modules!inner(id, status)
+            `)
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
 
@@ -156,6 +167,17 @@ export default function ExamPrepPage() {
                         .from('exam_subjects')
                         .update({ syllabus_path: syllabusPath })
                         .eq('id', subject.id)
+
+                    // Trigger Analysis in background
+                    toast("Analyzing syllabus highlights...", { description: "AI is checking for highlighted topics." })
+                    fetch('/api/exam-prep/analyze-syllabus', {
+                        method: 'POST',
+                        body: JSON.stringify({ subjectId: subject.id, syllabusPath })
+                    }).then(res => res.json())
+                        .then(data => {
+                            if (data.success) toast.success("Syllabus Priorities Extracted!")
+                        })
+                        .catch(err => console.error("Analysis trigger failed", err))
                 }
             }
 
@@ -194,12 +216,14 @@ export default function ExamPrepPage() {
         }
     }
 
-    const deleteSubject = async (id: string) => {
+    const performDelete = async () => {
+        if (!subjectToDelete) return
+
         try {
             const { error } = await supabase
                 .from('exam_subjects')
                 .delete()
-                .eq('id', id)
+                .eq('id', subjectToDelete)
 
             if (error) throw error
             toast.success('Subject deleted')
@@ -207,6 +231,8 @@ export default function ExamPrepPage() {
         } catch (error) {
             console.error('Error deleting subject:', error)
             toast.error('Failed to delete subject')
+        } finally {
+            setSubjectToDelete(null)
         }
     }
 
@@ -317,26 +343,26 @@ export default function ExamPrepPage() {
 
                             {/* Syllabus Upload */}
                             <div className="space-y-2">
-                                <Label>Syllabus PDF (Optional - Improves AI predictions)</Label>
+                                <Label>Syllabus (PDF or Image)</Label>
                                 <div className="relative">
                                     <input
                                         type="file"
-                                        accept=".pdf"
+                                        accept=".pdf,.png,.jpg,.jpeg"
                                         onChange={(e) => setSyllabusFile(e.target.files?.[0] || null)}
                                         className="hidden"
                                         id="syllabus-upload"
                                     />
                                     <label
                                         htmlFor="syllabus-upload"
-                                        className="flex items-center gap-2 p-3 border border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                                        className="flex items-center gap-2 p-3 border border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors w-full overflow-hidden"
                                     >
-                                        <Upload className="h-5 w-5 text-muted-foreground" />
-                                        <span className="text-sm text-muted-foreground">
-                                            {syllabusFile ? syllabusFile.name : 'Upload syllabus PDF'}
+                                        <Upload className="h-5 w-5 text-muted-foreground shrink-0" />
+                                        <span className="text-sm text-muted-foreground truncate">
+                                            {syllabusFile ? syllabusFile.name : 'Upload syllabus (PDF/Image)'}
                                         </span>
                                     </label>
                                 </div>
-                                <p className="text-xs text-muted-foreground">Upload your course syllabus (like the one from VIT) for better question predictions</p>
+                                <p className="text-xs text-muted-foreground">Upload your course syllabus (PDF or Screenshot) for better predictions</p>
                             </div>
                         </div>
 
@@ -356,7 +382,7 @@ export default function ExamPrepPage() {
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="glass-card">
-                    <CardContent className="pt-6">
+                    <CardContent className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="p-3 rounded-xl bg-amber-500/10">
                                 <BookOpen className="h-6 w-6 text-amber-400" />
@@ -369,7 +395,7 @@ export default function ExamPrepPage() {
                     </CardContent>
                 </Card>
                 <Card className="glass-card">
-                    <CardContent className="pt-6">
+                    <CardContent className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="p-3 rounded-xl bg-emerald-500/10">
                                 <FileQuestion className="h-6 w-6 text-emerald-400" />
@@ -384,7 +410,7 @@ export default function ExamPrepPage() {
                     </CardContent>
                 </Card>
                 <Card className="glass-card">
-                    <CardContent className="pt-6">
+                    <CardContent className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="p-3 rounded-xl bg-violet-500/10">
                                 <Target className="h-6 w-6 text-violet-400" />
@@ -419,11 +445,29 @@ export default function ExamPrepPage() {
                         <SubjectCard
                             key={subject.id}
                             subject={subject}
-                            onDelete={() => deleteSubject(subject.id)}
+                            onDelete={() => setSubjectToDelete(subject.id)}
                         />
                     ))}
                 </div>
             )}
+
+            <AlertDialog open={!!subjectToDelete} onOpenChange={(open) => !open && setSubjectToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will permanently delete the subject <strong>{subjects.find(s => s.id === subjectToDelete)?.name}</strong> and all its modules, files, and generated exam questions.
+                            This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={performDelete} className="bg-destructive text-white hover:bg-destructive/90">
+                            Delete Subject
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

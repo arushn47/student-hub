@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { MessageCircle, X, Send, Loader2, Sparkles, Minimize2, Maximize2 } from 'lucide-react'
+import { MessageCircle, X, Send, Loader2, Sparkles, Minimize2, Maximize2, Mic, MicOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Message {
@@ -15,9 +14,9 @@ interface Message {
 type ChatSize = 'small' | 'medium' | 'large'
 
 const CHAT_SIZES: Record<ChatSize, { width: string; height: string }> = {
-    small: { width: 'w-80', height: 'h-[400px]' },
-    medium: { width: 'w-96', height: 'h-[500px]' },
-    large: { width: 'w-[450px]', height: 'h-[600px]' },
+    small: { width: 'md:w-80', height: 'md:h-[400px]' },
+    medium: { width: 'md:w-96', height: 'md:h-[500px]' },
+    large: { width: 'md:w-[450px]', height: 'md:h-[600px]' },
 }
 
 export function StudyBuddyWidget() {
@@ -31,13 +30,74 @@ export function StudyBuddyWidget() {
     ])
     const [input, setInput] = useState('')
     const [loading, setLoading] = useState(false)
-    const scrollRef = useRef<HTMLDivElement>(null)
+    const [isListening, setIsListening] = useState(false)
+    const [speechSupported, setSpeechSupported] = useState(false)
+    const messagesEndRef = useRef<HTMLDivElement>(null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const recognitionRef = useRef<any>(null)
 
+    // Check for speech recognition support
     useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+        if (typeof window !== 'undefined') {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+            setSpeechSupported(!!SpeechRecognition)
         }
+    }, [])
+
+    // Scroll to bottom when messages change
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
+
+    // Initialize speech recognition
+    const startListening = useCallback(() => {
+        if (!speechSupported) return
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+        const recognition = new SpeechRecognition()
+
+        recognition.continuous = false
+        recognition.interimResults = true
+        recognition.lang = 'en-US'
+
+        recognition.onstart = () => {
+            setIsListening(true)
+        }
+
+        recognition.onresult = (event: { results: Iterable<unknown> | ArrayLike<unknown> }) => {
+            const transcript = Array.from(event.results)
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                .map((result: any) => result[0].transcript)
+                .join('')
+            setInput(transcript)
+        }
+
+        recognition.onerror = () => {
+            setIsListening(false)
+        }
+
+        recognition.onend = () => {
+            setIsListening(false)
+        }
+
+        recognitionRef.current = recognition
+        recognition.start()
+    }, [speechSupported])
+
+    const stopListening = useCallback(() => {
+        if (recognitionRef.current) {
+            recognitionRef.current.stop()
+            setIsListening(false)
+        }
+    }, [])
+
+    const toggleListening = () => {
+        if (isListening) {
+            stopListening()
+        } else {
+            startListening()
+        }
+    }
 
     const cycleSize = () => {
         const sizes: ChatSize[] = ['small', 'medium', 'large']
@@ -66,6 +126,25 @@ export function StudyBuddyWidget() {
             if (!response.ok) throw new Error('Failed to get response')
 
             const data = await response.json()
+
+            // Handle action responses (reminders, notes)
+            if (data.action) {
+                if (data.action.type === 'reminder' && data.action.success && data.action.data) {
+                    // Save reminder to localStorage
+                    const existingReminders = JSON.parse(localStorage.getItem('reminders') || '[]')
+                    const newReminder = {
+                        id: crypto.randomUUID(),
+                        title: data.action.data.title,
+                        datetime: data.action.data.datetime,
+                        type: 'custom',
+                        notified: false,
+                    }
+                    existingReminders.push(newReminder)
+                    localStorage.setItem('reminders', JSON.stringify(existingReminders))
+                }
+                // Notes are already saved to database by the API
+            }
+
             setMessages(prev => [...prev, { role: 'assistant', content: data.response }])
         } catch {
             setMessages(prev => [...prev, {
@@ -101,19 +180,22 @@ export function StudyBuddyWidget() {
                 <MessageCircle className="h-6 w-6" />
             </Button>
 
-            {/* Chat Panel */}
+            {/* Chat Panel - Fullscreen on mobile, positioned panel on desktop */}
             <div
                 className={cn(
-                    "fixed bottom-6 right-6 z-50",
+                    "fixed z-50 bg-gray-900/95 backdrop-blur-xl",
+                    // Mobile: fullscreen
+                    "inset-0 md:inset-auto",
+                    // Desktop: positioned panel
+                    "md:bottom-6 md:right-6 md:rounded-2xl md:shadow-2xl md:border md:border-white/10",
                     currentSize.width, currentSize.height,
-                    "bg-gray-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10",
                     "flex flex-col overflow-hidden",
                     "transition-all duration-300 ease-out",
                     isOpen ? "scale-100 opacity-100" : "scale-95 opacity-0 pointer-events-none"
                 )}
             >
                 {/* Header */}
-                <div className="p-3 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-purple-500/10 to-pink-500/10">
+                <div className="p-3 md:p-3 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-purple-500/10 to-pink-500/10 shrink-0">
                     <div className="flex items-center gap-2">
                         <div className="p-1.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
                             <Sparkles className="h-3.5 w-3.5 text-white" />
@@ -127,7 +209,7 @@ export function StudyBuddyWidget() {
                             variant="ghost"
                             size="icon"
                             onClick={cycleSize}
-                            className="h-7 w-7 text-gray-400 hover:text-white hover:bg-white/10"
+                            className="h-7 w-7 text-gray-400 hover:text-white hover:bg-white/10 hidden md:flex"
                             title={`Size: ${size}`}
                         >
                             {size === 'large' ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -136,15 +218,15 @@ export function StudyBuddyWidget() {
                             variant="ghost"
                             size="icon"
                             onClick={() => setIsOpen(false)}
-                            className="h-7 w-7 text-gray-400 hover:text-white hover:bg-white/10"
+                            className="h-8 w-8 md:h-7 md:w-7 text-gray-400 hover:text-white hover:bg-white/10"
                         >
-                            <X className="h-4 w-4" />
+                            <X className="h-5 w-5 md:h-4 md:w-4" />
                         </Button>
                     </div>
                 </div>
 
-                {/* Messages */}
-                <ScrollArea className="flex-1 p-3" ref={scrollRef}>
+                {/* Messages - Proper scrollable container */}
+                <div className="flex-1 overflow-y-auto p-3 md:p-3">
                     <div className="space-y-3">
                         {messages.map((message, index) => (
                             <div
@@ -162,7 +244,7 @@ export function StudyBuddyWidget() {
                                             : "bg-white/10 text-gray-200"
                                     )}
                                 >
-                                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                                    <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
                                 </div>
                             </div>
                         ))}
@@ -173,31 +255,63 @@ export function StudyBuddyWidget() {
                                 </div>
                             </div>
                         )}
+                        <div ref={messagesEndRef} />
                     </div>
-                </ScrollArea>
+                </div>
 
-                {/* Input */}
-                <div className="p-3 border-t border-white/10">
+                {/* Input - Fixed at bottom with proper padding for mobile */}
+                <div className="p-3 md:p-3 border-t border-white/10 shrink-0 safe-area-bottom">
                     <div className="flex gap-2">
                         <Input
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyPress={handleKeyPress}
                             placeholder="Ask me anything..."
-                            className="flex-1 bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500 text-sm"
+                            className="flex-1 bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500 text-sm h-10"
                             disabled={loading}
                         />
+                        {/* Voice Input Button */}
+                        {speechSupported && (
+                            <Button
+                                onClick={toggleListening}
+                                size="sm"
+                                variant={isListening ? "destructive" : "outline"}
+                                className={cn(
+                                    "h-10 w-10 shrink-0",
+                                    isListening
+                                        ? "bg-red-500 hover:bg-red-600 border-red-500"
+                                        : "bg-white/5 border-white/10 text-white hover:bg-white/10"
+                                )}
+                            >
+                                {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                            </Button>
+                        )}
                         <Button
                             onClick={sendMessage}
                             disabled={!input.trim() || loading}
                             size="sm"
-                            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                            className="h-10 w-10 shrink-0 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                         >
                             <Send className="h-4 w-4" />
                         </Button>
                     </div>
+                    {isListening && (
+                        <p className="text-xs text-purple-400 mt-2 text-center animate-pulse">
+                            🎤 Listening... Speak now
+                        </p>
+                    )}
                 </div>
             </div>
         </>
     )
+}
+
+// Add Web Speech API type declarations
+declare global {
+    interface Window {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        SpeechRecognition: any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        webkitSpeechRecognition: any
+    }
 }

@@ -22,7 +22,8 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Settings, User, Bell, Palette, Shield, Loader2, Link2, Unlink } from 'lucide-react'
+import { GoogleAccountsManager } from '@/components/settings/GoogleAccountsManager'
+import { Settings, User, Bell, Palette, Shield, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTheme } from 'next-themes'
 
@@ -42,7 +43,6 @@ export default function SettingsPage() {
     const [saving, setSaving] = useState(false)
     const [profile, setProfile] = useState<UserProfile | null>(null)
     const [googleConnected, setGoogleConnected] = useState(false)
-    const [connectingGoogle, setConnectingGoogle] = useState(false)
     const supabase = createClient()
     const { theme, setTheme } = useTheme()
     const searchParams = useSearchParams()
@@ -342,66 +342,11 @@ export default function SettingsPage() {
                         Google Integrations
                     </CardTitle>
                     <CardDescription className="text-gray-400">
-                        Connect Google to sync Calendar, Tasks, and more
+                        Connect multiple Google accounts - use your school account for Classroom and personal for Tasks
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-white font-medium">Google Account</p>
-                            <p className="text-gray-400 text-sm">
-                                {googleConnected ? 'Connected - Sync enabled' : 'Connect to sync Calendar & Tasks'}
-                            </p>
-                        </div>
-                        {googleConnected ? (
-                            <Button
-                                variant="outline"
-                                className="border-red-500/30 text-red-400 hover:bg-red-500/10"
-                                onClick={async () => {
-                                    const { data: { user } } = await supabase.auth.getUser()
-                                    if (!user) return
-                                    await supabase
-                                        .from('profiles')
-                                        .update({ google_tokens: null, google_connected: false })
-                                        .eq('id', user.id)
-                                    setGoogleConnected(false)
-                                    toast.success('Google account disconnected')
-                                }}
-                            >
-                                <Unlink className="h-4 w-4 mr-2" />
-                                Disconnect
-                            </Button>
-                        ) : (
-                            <Button
-                                className="bg-white text-gray-800 hover:bg-gray-100"
-                                disabled={connectingGoogle}
-                                onClick={async () => {
-                                    setConnectingGoogle(true)
-                                    try {
-                                        const res = await fetch('/api/auth/google')
-                                        const { authUrl } = await res.json()
-                                        window.location.href = authUrl
-                                    } catch {
-                                        toast.error('Failed to start Google connection')
-                                        setConnectingGoogle(false)
-                                    }
-                                }}
-                            >
-                                {connectingGoogle ? (
-                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                ) : (
-                                    <Link2 className="h-4 w-4 mr-2" />
-                                )}
-                                Connect Google
-                            </Button>
-                        )}
-                    </div>
-                    {googleConnected && (
-                        <div className="text-xs text-gray-500 bg-white/5 rounded-lg p-3">
-                            <p>✓ Calendar events will sync with your timetable</p>
-                            <p>✓ Tasks will sync with Google Tasks</p>
-                        </div>
-                    )}
+                <CardContent>
+                    <GoogleAccountsManager onConnectionChange={setGoogleConnected} />
                 </CardContent>
             </Card>
 

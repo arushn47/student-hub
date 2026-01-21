@@ -4,29 +4,95 @@ import { TasksWidget } from '@/components/dashboard/TasksWidget'
 import { NotesWidget } from '@/components/dashboard/NotesWidget'
 import { NextClassWidget } from '@/components/dashboard/NextClassWidget'
 import { QuickActions } from '@/components/dashboard/QuickActions'
-import { FileText, CheckSquare, Clock, Target, Flame, TrendingUp } from 'lucide-react'
-import type { Task, Note, ClassSchedule } from '@/types'
+import { FileText, CheckSquare, Clock, Target, Palmtree, TrendingUp } from 'lucide-react'
+import { StreakBadge } from '@/components/dashboard/StreakBadge'
+import type { Task, Note, ClassSchedule, SemesterBreak, Semester } from '@/types'
 
 async function getStats(supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never, userId: string) {
-    const [notesResult, tasksResult, classesResult] = await Promise.all([
+    const [notesResult, tasksResult, classesResult, semestersResult, breaksResult, subjectsResult] = await Promise.all([
         supabase.from('notes').select('*').eq('user_id', userId).is('deleted_at', null).order('updated_at', { ascending: false }),
         supabase.from('tasks').select('*').eq('user_id', userId).is('deleted_at', null).order('due_date', { ascending: true }),
         supabase.from('class_schedules').select('*').eq('user_id', userId).eq('is_active', true),
+        supabase.from('semesters').select('*').eq('user_id', userId).order('start_date', { ascending: false }),
+        supabase.from('semester_breaks').select('*').eq('user_id', userId).order('start_date', { ascending: true }),
+        supabase.from('exam_subjects').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
     ])
+
+    // Find active semester and filter breaks
+    const semesters = (semestersResult.data || []) as Semester[]
+    const allBreaks = (breaksResult.data || []) as SemesterBreak[]
+    const activeSemester = semesters.find(s => s.is_active)
+
+    // Filter breaks to only those in the active semester
+    const breaks = activeSemester
+        ? allBreaks.filter(b => b.semester_id === activeSemester.id)
+        : allBreaks
 
     return {
         notes: (notesResult.data || []) as Note[],
         tasks: (tasksResult.data || []) as Task[],
         classes: (classesResult.data || []) as ClassSchedule[],
+        subjects: (subjectsResult.data || []) as any[],
+        breaks,
     }
+}
+
+// Check if a date is during any break
+function isOnBreak(date: Date, breaks: SemesterBreak[]): { onBreak: boolean; breakName?: string } {
+    const today = date.toISOString().split('T')[0]
+
+    for (const b of breaks) {
+        if (today >= b.start_date && today <= b.end_date) {
+            return { onBreak: true, breakName: b.name }
+        }
+    }
+    return { onBreak: false }
 }
 
 export default async function DashboardPage() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    const { notes, tasks, classes } = await getStats(supabase, user!.id)
+    // Handle guest mode - show demo data
+    if (!user) {
+        return <DashboardContent
+            notes={[]}
+            tasks={[]}
+            classes={[]}
+            subjects={[]}
+            breaks={[]}
+            userName="Guest"
+        />
+    }
 
+    const { notes, tasks, classes, subjects, breaks } = await getStats(supabase, user.id)
+    const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Student'
+
+    return <DashboardContent
+        notes={notes}
+        tasks={tasks}
+        classes={classes}
+        subjects={subjects}
+        breaks={breaks}
+        userName={firstName}
+    />
+}
+
+function DashboardContent({
+    notes,
+    tasks,
+    classes,
+    subjects,
+    breaks,
+    userName
+}: {
+    notes: Note[]
+    tasks: Task[]
+    classes: ClassSchedule[]
+    subjects: any[]
+    breaks: SemesterBreak[]
+    userName: string
+}) {
     const completedTasks = tasks.filter(t => t.status === 'done').length
     const totalTasks = tasks.length
     const pendingTasks = totalTasks - completedTasks
@@ -39,12 +105,14 @@ export default async function DashboardPage() {
         return 'Good evening'
     }
 
-    const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Student'
-
     // Get today's date info
     const today = new Date()
     const dateOptions: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long', day: 'numeric' }
     const formattedDate = today.toLocaleDateString('en-US', dateOptions)
+
+    // Check if today is on break
+    const breakStatus = isOnBreak(today, breaks)
+    const classesToday = breakStatus.onBreak ? 0 : classes.filter(c => c.day_of_week === today.getDay()).length
 
     return (
         <div className="space-y-8">
@@ -53,52 +121,86 @@ export default async function DashboardPage() {
                 <div className="space-y-2">
                     <p className="text-sm text-gray-400">{formattedDate}</p>
                     <h1 className="text-3xl md:text-4xl font-bold text-white">
-                        {greeting()}, <span className="gradient-text">{firstName}</span>! 👋
+                        {greeting()}, <span className="gradient-text">{userName}</span>! 👋
                     </h1>
-                    <p className="text-gray-400">Here&apos;s your productivity overview for today.</p>
+                    <p className="text-gray-400">Ready to crush your exams?</p>
                 </div>
 
                 {/* Quick stats badge */}
                 <div className="flex items-center gap-2 text-sm">
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        <Flame className="h-4 w-4" />
-                        <span className="font-medium">3 day streak</span>
-                    </div>
+                    {breakStatus.onBreak ? (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                            <Palmtree className="h-4 w-4" />
+                            <span className="font-medium">{breakStatus.breakName || 'On Break'}</span>
+                        </div>
+                    ) : (
+                        <StreakBadge pendingTasks={pendingTasks} />
+                    )}
                 </div>
             </div>
 
-            {/* Motivation Card */}
-            <MotivationCard />
+            {/* Exam Prep Hero (New!) */}
+            {subjects.length > 0 ? (
+                <div className="relative p-6 rounded-3xl bg-gradient-to-r from-amber-500/20 to-orange-600/20 border border-amber-500/30 overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <Target className="w-32 h-32 text-amber-500 transform rotate-12" />
+                    </div>
+
+                    <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                        <div>
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-semibold border border-amber-500/30">
+                                    Top Priority
+                                </span>
+                            </div>
+                            <h3 className="text-2xl font-bold text-white mb-2">Continue Studying</h3>
+                            <p className="text-gray-400 max-w-lg">
+                                You have {subjects.length} active subjects. Pick up where you left off with
+                                <span className="text-amber-400 font-medium ml-1">{subjects[0].name}</span>.
+                            </p>
+                        </div>
+
+                        <a href={`/dashboard/exam-prep/${subjects[0].id}`} className="shrink-0 w-full md:w-auto">
+                            <button className="w-full md:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold shadow-lg shadow-amber-900/20 transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2">
+                                Resume Prep
+                                <TrendingUp className="h-4 w-4" />
+                            </button>
+                        </a>
+                    </div>
+                </div>
+            ) : (
+                <MotivationCard />
+            )}
 
             {/* Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
-                    icon={FileText}
-                    label="Total Notes"
-                    value={notes.length}
-                    color="violet"
-                    trend="+2 this week"
+                    icon={Target}
+                    label="Active Subjects"
+                    value={subjects.length}
+                    color="amber"
+                    trend="Exam Prep"
                 />
                 <StatCard
                     icon={CheckSquare}
                     label="Pending Tasks"
                     value={pendingTasks}
-                    color="amber"
+                    color="violet"
                     trend={`${completionRate}% complete`}
                 />
                 <StatCard
-                    icon={Target}
-                    label="Completed"
-                    value={completedTasks}
+                    icon={FileText}
+                    label="Total Notes"
+                    value={notes.length}
                     color="emerald"
-                    trend="Keep it up!"
+                    trend="Knowledge Base"
                 />
                 <StatCard
-                    icon={Clock}
+                    icon={breakStatus.onBreak ? Palmtree : Clock}
                     label="Classes Today"
-                    value={classes.filter(c => c.day_of_week === today.getDay()).length}
+                    value={classesToday}
                     color="cyan"
-                    trend={`${classes.length} total`}
+                    trend={breakStatus.onBreak ? 'Enjoy Break' : 'Scheduled'}
                 />
             </div>
 
@@ -116,6 +218,7 @@ export default async function DashboardPage() {
         </div>
     )
 }
+
 
 function StatCard({
     icon: Icon,

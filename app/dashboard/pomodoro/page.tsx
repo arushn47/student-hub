@@ -11,7 +11,9 @@ import {
     Brain,
     Flame,
     Volume2,
-    VolumeX
+    VolumeX,
+    Eye,
+    EyeOff
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -23,13 +25,49 @@ const TIMER_CONFIGS = {
     longBreak: { minutes: 15, label: 'Long Break', color: 'cyan', icon: Coffee },
 }
 
+// Web Audio API for notification sound
+function playNotificationSound() {
+    try {
+        const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+
+        // Create a pleasant bell/chime sound
+        const playTone = (frequency: number, startTime: number, duration: number) => {
+            const oscillator = audioContext.createOscillator()
+            const gainNode = audioContext.createGain()
+
+            oscillator.connect(gainNode)
+            gainNode.connect(audioContext.destination)
+
+            oscillator.frequency.value = frequency
+            oscillator.type = 'sine'
+
+            // Envelope for natural sound
+            gainNode.gain.setValueAtTime(0, startTime)
+            gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.01)
+            gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration)
+
+            oscillator.start(startTime)
+            oscillator.stop(startTime + duration)
+        }
+
+        const now = audioContext.currentTime
+        // Play a pleasant chord
+        playTone(523.25, now, 0.3)      // C5
+        playTone(659.25, now + 0.1, 0.3) // E5
+        playTone(783.99, now + 0.2, 0.4) // G5
+    } catch (e) {
+        console.log('Audio not supported:', e)
+    }
+}
+
 export default function PomodoroPage() {
     const [mode, setMode] = useState<TimerMode>('focus')
     const [timeLeft, setTimeLeft] = useState(TIMER_CONFIGS.focus.minutes * 60)
     const [isRunning, setIsRunning] = useState(false)
     const [sessionsCompleted, setSessionsCompleted] = useState(0)
     const [soundEnabled, setSoundEnabled] = useState(true)
-    const audioRef = useRef<HTMLAudioElement | null>(null)
+    const [timerHidden, setTimerHidden] = useState(false)
+    const lastModeRef = useRef(mode)
 
     const config = TIMER_CONFIGS[mode]
     const totalSeconds = config.minutes * 60
@@ -38,8 +76,8 @@ export default function PomodoroPage() {
     const seconds = timeLeft % 60
 
     const playSound = useCallback(() => {
-        if (soundEnabled && audioRef.current) {
-            audioRef.current.play().catch(() => { })
+        if (soundEnabled) {
+            playNotificationSound()
         }
     }, [soundEnabled])
 
@@ -62,11 +100,12 @@ export default function PomodoroPage() {
                             setSessionsCompleted(c => c + 1)
                             const nextCount = sessionsCompleted + 1
                             const nextMode = (nextCount + 1) % 4 === 0 ? 'longBreak' : 'shortBreak'
-                            // Auto-switch mode or stop
                             setMode(nextMode)
+                            setIsRunning(false) // Pause after session completion
                             return TIMER_CONFIGS[nextMode].minutes * 60
                         } else {
                             setMode('focus')
+                            setIsRunning(false) // Pause after break
                             return TIMER_CONFIGS.focus.minutes * 60
                         }
                     }
@@ -80,16 +119,13 @@ export default function PomodoroPage() {
         }
     }, [isRunning, timeLeft, mode, sessionsCompleted, playSound])
 
-    // Effect to stop running when mode changes auto-magically if needed, 
-    // but the above refactor handles the switch and resets time.
-    // We need to ensure isRunning stays true or becomes false as desired.
-    // Let's stop the timer when it completes a cycle.
-
+    // Reset time when mode changes manually
     useEffect(() => {
-        // Reset running state if we switched modes manually or automatically via the interval logic
-        // Actually, if we want auto-transition, the above logic sets new time.
-        // If we want it to PAUSE after a session:
-    }, [])
+        if (lastModeRef.current !== mode) {
+            setTimeLeft(TIMER_CONFIGS[mode].minutes * 60)
+            lastModeRef.current = mode
+        }
+    }, [mode])
 
     const toggleTimer = () => setIsRunning(!isRunning)
 
@@ -105,6 +141,7 @@ export default function PomodoroPage() {
             bg: 'bg-rose-500/10',
             text: 'text-rose-400',
             border: 'border-rose-500/30',
+            progressBg: 'bg-rose-500',
         },
         emerald: {
             gradient: 'from-emerald-500 to-teal-600',
@@ -112,6 +149,7 @@ export default function PomodoroPage() {
             bg: 'bg-emerald-500/10',
             text: 'text-emerald-400',
             border: 'border-emerald-500/30',
+            progressBg: 'bg-emerald-500',
         },
         cyan: {
             gradient: 'from-cyan-500 to-blue-600',
@@ -119,6 +157,7 @@ export default function PomodoroPage() {
             bg: 'bg-cyan-500/10',
             text: 'text-cyan-400',
             border: 'border-cyan-500/30',
+            progressBg: 'bg-cyan-500',
         },
     }
 
@@ -126,9 +165,6 @@ export default function PomodoroPage() {
 
     return (
         <div className="max-w-2xl mx-auto space-y-8">
-            {/* Hidden audio element */}
-            <audio ref={audioRef} src="/sounds/bell.mp3" preload="auto" />
-
             {/* Header */}
             <div className="text-center space-y-2">
                 <h1 className="text-3xl font-bold text-white">Pomodoro Timer</h1>
@@ -181,46 +217,72 @@ export default function PomodoroPage() {
             {/* Timer Display */}
             <Card className="glass-card border-white/[0.06] overflow-hidden">
                 <CardContent className="p-8 md:p-12">
-                    <div className="relative flex items-center justify-center">
-                        {/* Progress Ring */}
-                        <svg className="w-64 h-64 md:w-80 md:h-80 transform -rotate-90">
-                            {/* Background circle */}
-                            <circle
-                                cx="50%"
-                                cy="50%"
-                                r="45%"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="4"
-                                className="text-white/5"
-                            />
-                            {/* Progress circle */}
-                            <circle
-                                cx="50%"
-                                cy="50%"
-                                r="45%"
-                                fill="none"
-                                strokeWidth="6"
-                                strokeLinecap="round"
-                                className={cn(colors.ring, "transition-all duration-1000")}
-                                strokeDasharray={`${2 * Math.PI * 45}%`}
-                                strokeDashoffset={`${2 * Math.PI * 45 * (1 - progress / 100)}%`}
-                            />
-                        </svg>
-
-                        {/* Time Display */}
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <div className={cn("p-3 rounded-2xl mb-4", colors.bg)}>
-                                <config.icon className={cn("h-8 w-8", colors.text)} />
+                    {timerHidden ? (
+                        // Hidden Timer Mode - Minimal progress bar
+                        <div className="space-y-6">
+                            <div className="text-center">
+                                <div className={cn("inline-flex p-4 rounded-2xl mb-4", colors.bg)}>
+                                    <config.icon className={cn("h-10 w-10", colors.text)} />
+                                </div>
+                                <p className={cn("text-lg font-medium", colors.text)}>
+                                    {config.label}
+                                </p>
+                                <p className="text-sm text-gray-400 mt-1">
+                                    {isRunning ? 'In progress...' : 'Paused'}
+                                </p>
                             </div>
-                            <span className="text-6xl md:text-7xl font-bold text-white font-mono tracking-tight">
-                                {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
-                            </span>
-                            <span className={cn("text-sm mt-2", colors.text)}>
-                                {config.label}
-                            </span>
+
+                            {/* Progress Bar */}
+                            <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                                <div
+                                    className={cn("h-full transition-all duration-1000 rounded-full", colors.progressBg)}
+                                    style={{ width: `${progress}%` }}
+                                />
+                            </div>
                         </div>
-                    </div>
+                    ) : (
+                        // Normal Timer Mode
+                        <div className="relative flex items-center justify-center">
+                            {/* Progress Ring */}
+                            <svg className="w-64 h-64 md:w-80 md:h-80 transform -rotate-90">
+                                {/* Background circle */}
+                                <circle
+                                    cx="50%"
+                                    cy="50%"
+                                    r="45%"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="4"
+                                    className="text-white/5"
+                                />
+                                {/* Progress circle */}
+                                <circle
+                                    cx="50%"
+                                    cy="50%"
+                                    r="45%"
+                                    fill="none"
+                                    strokeWidth="6"
+                                    strokeLinecap="round"
+                                    className={cn(colors.ring, "transition-all duration-1000")}
+                                    strokeDasharray={`${2 * Math.PI * 45}%`}
+                                    strokeDashoffset={`${2 * Math.PI * 45 * (1 - progress / 100)}%`}
+                                />
+                            </svg>
+
+                            {/* Time Display */}
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <div className={cn("p-3 rounded-2xl mb-4", colors.bg)}>
+                                    <config.icon className={cn("h-8 w-8", colors.text)} />
+                                </div>
+                                <span className="text-6xl md:text-7xl font-bold text-white font-mono tracking-tight">
+                                    {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+                                </span>
+                                <span className={cn("text-sm mt-2", colors.text)}>
+                                    {config.label}
+                                </span>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Controls */}
                     <div className="flex justify-center items-center gap-4 mt-8">
@@ -259,6 +321,20 @@ export default function PomodoroPage() {
                                 <VolumeX className="h-5 w-5" />
                             )}
                         </Button>
+
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setTimerHidden(!timerHidden)}
+                            className="h-12 w-12 rounded-full text-gray-400 hover:text-white hover:bg-white/10"
+                            title={timerHidden ? "Show timer" : "Hide timer (focus mode)"}
+                        >
+                            {timerHidden ? (
+                                <Eye className="h-5 w-5" />
+                            ) : (
+                                <EyeOff className="h-5 w-5" />
+                            )}
+                        </Button>
                     </div>
                 </CardContent>
             </Card>
@@ -275,8 +351,12 @@ export default function PomodoroPage() {
                     <p className="text-sm text-gray-400">
                         💡 Remove distractions, silence notifications, and focus on one task at a time.
                     </p>
+                    <p className="text-sm text-gray-400">
+                        👁️ Use the <span className="text-white">hide timer</span> button if watching the clock is distracting you!
+                    </p>
                 </CardContent>
             </Card>
         </div>
     )
 }
+

@@ -365,7 +365,7 @@ export default function GradesPage() {
                     <h1 className="text-3xl font-bold text-white">CGPA Calculator</h1>
                     <p className="text-gray-400 mt-1">Track your academic performance across semesters</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     <ImageUploadExtractor
                         type="grades"
                         title="Extract Grades (PDF Support)"
@@ -484,7 +484,7 @@ export default function GradesPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="glass-card border-white/[0.06] md:col-span-2">
                     <CardContent className="p-6">
-                        <div className="flex items-center gap-6">
+                        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-center sm:text-left">
                             <div className="p-4 rounded-2xl bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20">
                                 <GraduationCap className="h-10 w-10 text-violet-400" />
                             </div>
@@ -495,7 +495,7 @@ export default function GradesPage() {
                                 </p>
                                 <p className="text-sm text-gray-500 mt-1">out of 10.0</p>
                             </div>
-                            <div className="ml-auto text-right">
+                            <div className="mt-4 sm:mt-0 sm:ml-auto text-center sm:text-right">
                                 <p className="text-2xl font-bold text-white">{totalCredits}</p>
                                 <p className="text-sm text-gray-400">Total Credits</p>
                             </div>
@@ -763,7 +763,8 @@ export default function GradesPage() {
                             <CollapsibleContent>
                                 <div className="space-y-1 p-2">
                                     {/* Header */}
-                                    <div className="grid grid-cols-12 gap-4 px-4 py-2 text-xs text-gray-500 uppercase rounded-t-lg bg-white/[0.01]">
+                                    {/* Header - Hidden on Mobile */}
+                                    <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-xs text-gray-500 uppercase rounded-t-lg bg-white/[0.01]">
                                         <div className="col-span-6">Course</div>
                                         <div className="col-span-2 text-center">Credits</div>
                                         <div className="col-span-2 text-center">Grade</div>
@@ -773,67 +774,105 @@ export default function GradesPage() {
                                     {semCourses.map((course) => (
                                         <div
                                             key={course.id}
-                                            className="grid grid-cols-12 gap-4 items-center px-4 py-3 rounded-lg hover:bg-white/[0.04] transition-colors group"
+                                            className="px-4 py-3 rounded-lg hover:bg-white/[0.04] transition-colors group"
                                         >
-                                            <div className="col-span-6 font-medium text-white/90 truncate">{course.name}</div>
-                                            <div className="col-span-2 text-center text-gray-400">{course.credits}</div>
-                                            <div className={cn("col-span-2 text-center font-bold", gradeColors[course.grade])}>
-                                                {course.grade}
+                                            {/* Mobile Row */}
+                                            <div className="flex md:hidden items-center justify-between gap-3">
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="font-medium text-white/90 truncate">{course.name}</div>
+                                                    <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
+                                                        <span>{course.credits} Cr</span>
+                                                        <span className={cn("font-bold ml-1", gradeColors[course.grade])}>
+                                                            {course.grade}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                                                                <Pencil className="h-4 w-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent className="bg-popover border-border">
+                                                            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                                                                <DropdownMenuItem
+                                                                    key={n}
+                                                                    onClick={() => updateCourseSemester(course.id, `Semester ${n}`)}
+                                                                >
+                                                                    Move to Semester {n}
+                                                                </DropdownMenuItem>
+                                                            ))}
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => removeCourse(course.id)}>
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
                                             </div>
-                                            <div className="col-span-2 text-right flex items-center justify-end gap-1">
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-7 w-7 text-muted-foreground hover:text-blue-400 hover:bg-blue-500/10 transition-all"
-                                                        >
-                                                            <Pencil className="h-3.5 w-3.5" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent className="bg-popover border-border">
-                                                        {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                                                            <DropdownMenuItem
-                                                                key={n}
-                                                                onClick={() => updateCourseSemester(course.id, `Semester ${n}`)}
-                                                                className={cn(
-                                                                    "cursor-pointer",
-                                                                    course.semester === `Semester ${n}` && "bg-violet-500/20 text-violet-400"
-                                                                )}
+
+                                            {/* Desktop Row */}
+                                            <div className="hidden md:grid grid-cols-12 gap-4 items-center">
+                                                <div className="col-span-6 font-medium text-white/90 truncate">{course.name}</div>
+                                                <div className="col-span-2 text-center text-gray-400">{course.credits}</div>
+                                                <div className={cn("col-span-2 text-center font-bold", gradeColors[course.grade])}>
+                                                    {course.grade}
+                                                </div>
+                                                <div className="col-span-2 text-right flex items-center justify-end gap-1">
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-7 w-7 text-muted-foreground hover:text-blue-400 hover:bg-blue-500/10 transition-all"
                                                             >
-                                                                Semester {n}
-                                                            </DropdownMenuItem>
-                                                        ))}
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-7 w-7 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent className="bg-card border-border">
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>Delete Course</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                Are you sure you want to delete &quot;{course.name}&quot;? This action cannot be undone.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel className="border-border">Cancel</AlertDialogCancel>
-                                                            <AlertDialogAction
-                                                                onClick={() => removeCourse(course.id)}
-                                                                className="bg-red-500 hover:bg-red-600 text-white"
+                                                                <Pencil className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent className="bg-popover border-border">
+                                                            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                                                                <DropdownMenuItem
+                                                                    key={n}
+                                                                    onClick={() => updateCourseSemester(course.id, `Semester ${n}`)}
+                                                                    className={cn(
+                                                                        "cursor-pointer",
+                                                                        course.semester === `Semester ${n}` && "bg-violet-500/20 text-violet-400"
+                                                                    )}
+                                                                >
+                                                                    Semester {n}
+                                                                </DropdownMenuItem>
+                                                            ))}
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-7 w-7 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all"
                                                             >
-                                                                Delete
-                                                            </AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent className="bg-card border-border">
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Delete Course</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    Are you sure you want to delete &quot;{course.name}&quot;? This action cannot be undone.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel className="border-border">Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction
+                                                                    onClick={() => removeCourse(course.id)}
+                                                                    className="bg-red-500 hover:bg-red-600 text-white"
+                                                                >
+                                                                    Delete
+                                                                </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </div>
                                             </div>
                                         </div>
                                     ))}

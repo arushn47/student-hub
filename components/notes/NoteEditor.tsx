@@ -257,10 +257,10 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
                 </span>
             </div>
 
-            {/* Bottom Toolbar - Like Google Keep */}
-            <div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10">
-                <div className="flex items-center gap-1">
-                    {/* Formatting */}
+            {/* Bottom Toolbar - Responsive */}
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 p-2 rounded-lg bg-white/5 border border-white/10">
+                {/* Formatting - Scrollable on mobile */}
+                <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
                     <ToolbarButton
                         onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
                         active={editor?.isActive('heading', { level: 1 })}
@@ -273,7 +273,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
                         icon={Heading2}
                         tooltip="Heading 2"
                     />
-                    <div className="w-px h-5 bg-white/10 mx-1" />
+                    <div className="w-px h-5 bg-white/10 mx-1 hidden md:block" />
                     <ToolbarButton
                         onClick={() => editor?.chain().focus().toggleBold().run()}
                         active={editor?.isActive('bold')}
@@ -286,7 +286,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
                         icon={Italic}
                         tooltip="Italic"
                     />
-                    <div className="w-px h-5 bg-white/10 mx-1" />
+                    <div className="w-px h-5 bg-white/10 mx-1 hidden md:block" />
                     <ToolbarButton
                         onClick={() => editor?.chain().focus().toggleBulletList().run()}
                         active={editor?.isActive('bulletList')}
@@ -305,7 +305,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
                         icon={CheckSquare}
                         tooltip="Checklist"
                     />
-                    <div className="w-px h-5 bg-white/10 mx-1" />
+                    <div className="w-px h-5 bg-white/10 mx-1 hidden md:block" />
                     <ToolbarButton
                         onClick={() => editor?.chain().focus().undo().run()}
                         disabled={!editor?.can().undo()}
@@ -321,7 +321,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
                 </div>
 
                 {/* AI Actions */}
-                <div className="flex items-center gap-1">
+                <div className="flex items-center justify-end gap-1 border-t border-white/10 pt-2 md:border-0 md:pt-0">
                     <SpeechToTextButton
                         onTranscript={(text) => {
                             if (editor) {

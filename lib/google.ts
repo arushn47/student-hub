@@ -26,10 +26,15 @@ export function getAuthUrl(options?: { redirectUri?: string }) {
     return oauth2Client.generateAuthUrl({
         access_type: 'offline',
         scope: [
+            'https://www.googleapis.com/auth/userinfo.email',
+            'https://www.googleapis.com/auth/userinfo.profile',
             'https://www.googleapis.com/auth/calendar',
             'https://www.googleapis.com/auth/calendar.events',
             'https://www.googleapis.com/auth/tasks',
             'https://www.googleapis.com/auth/tasks.readonly',
+            'https://www.googleapis.com/auth/classroom.courses.readonly',
+            'https://www.googleapis.com/auth/classroom.coursework.me.readonly',
+            'https://www.googleapis.com/auth/classroom.student-submissions.me.readonly',
         ],
         prompt: 'consent', // Force to get refresh token
     })
@@ -54,9 +59,32 @@ export function getTasksClient(tokens: { access_token: string; refresh_token?: s
     return google.tasks({ version: 'v1', auth })
 }
 
+// Classroom API helpers
+export function getClassroomClient(tokens: { access_token: string; refresh_token?: string }) {
+    const auth = getAuthenticatedClient(tokens)
+    return google.classroom({ version: 'v1', auth })
+}
+
 // Type for stored tokens
 export interface GoogleTokens {
     access_token: string
     refresh_token?: string
     expiry_date?: number
 }
+
+// Type for google_accounts table row
+export interface GoogleAccount {
+    id: string
+    user_id: string
+    email: string
+    name: string | null
+    picture: string | null
+    tokens: GoogleTokens
+    services: string[]
+    is_primary: boolean
+    created_at: string
+    updated_at: string
+}
+
+// Service types
+export type GoogleService = 'tasks' | 'calendar' | 'classroom'

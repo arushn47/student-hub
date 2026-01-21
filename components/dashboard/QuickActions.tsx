@@ -29,9 +29,9 @@ const quickActions = [
         color: 'from-rose-500 to-pink-500',
     },
     {
-        label: 'Study Cards',
+        label: 'Assignments',
         icon: Layers,
-        href: '/dashboard/flashcards',
+        href: '/dashboard/assignments',
         color: 'from-amber-500 to-orange-500',
     },
 ]

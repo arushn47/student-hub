@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getOAuth2Client } from '@/lib/google'
+import { google } from 'googleapis'
 
 export async function GET(req: NextRequest) {
     try {
@@ -30,19 +31,65 @@ export async function GET(req: NextRequest) {
             return NextResponse.redirect(new URL('/login', req.url))
         }
 
-        // Store tokens in profile
-        const { error: updateError } = await supabase
+        // Get Google account info
+        oauth2Client.setCredentials(tokens)
+        const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client })
+        const { data: googleUser } = await oauth2.userinfo.get()
+
+        const googleEmail = googleUser.email || 'unknown@gmail.com'
+        const googleName = googleUser.name || null
+        const googlePicture = googleUser.picture || null
+
+        // Check if this Google account already exists for this user
+        const { data: existingAccount } = await supabase
+            .from('google_accounts')
+            .select('id, services')
+            .eq('user_id', user.id)
+            .eq('email', googleEmail)
+            .single()
+
+        if (existingAccount) {
+            // Update existing account with new tokens
+            await supabase
+                .from('google_accounts')
+                .update({
+                    tokens,
+                    name: googleName,
+                    picture: googlePicture,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', existingAccount.id)
+        } else {
+            // Check how many accounts user already has
+            const { count } = await supabase
+                .from('google_accounts')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+
+            const isFirst = (count || 0) === 0
+
+            // Insert new account
+            await supabase
+                .from('google_accounts')
+                .insert({
+                    user_id: user.id,
+                    email: googleEmail,
+                    name: googleName,
+                    picture: googlePicture,
+                    tokens,
+                    // First account gets all services, additional accounts get classroom by default
+                    services: isFirst ? ['tasks', 'calendar', 'classroom'] : ['classroom'],
+                    is_primary: isFirst,
+                })
+        }
+
+        // Also update profiles for backwards compatibility
+        await supabase
             .from('profiles')
             .update({
-                google_tokens: tokens,
                 google_connected: true,
             })
             .eq('id', user.id)
-
-        if (updateError) {
-            console.error('Failed to store Google tokens:', updateError)
-            return NextResponse.redirect(new URL('/dashboard/settings?google_error=storage_failed', req.url))
-        }
 
         return NextResponse.redirect(new URL('/dashboard/settings?google_connected=true', req.url))
 

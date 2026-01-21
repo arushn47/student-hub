@@ -3,11 +3,14 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, useCallback } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
     Select,
@@ -33,7 +36,8 @@ import {
     Sparkles,
     File,
     Trash2,
-    ExternalLink
+    ExternalLink,
+    Download
 } from 'lucide-react'
 import {
     DropdownMenu,
@@ -43,6 +47,22 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+    Document as DocxDocument,
+    Packer,
+    Paragraph,
+    TextRun,
+    HeadingLevel,
+    Table,
+    TableRow,
+    TableCell,
+    BorderStyle,
+    WidthType,
+    AlignmentType,
+    INumberingOptions,
+    LevelFormat,
+    SectionType
+} from 'docx'
 import {
     Collapsible,
     CollapsibleContent,
@@ -58,6 +78,7 @@ interface Subject {
     total_modules: number
     questions_per_module: number
     marks_per_question: number
+    important_questions?: string // Global important questions/syllabus
 }
 
 interface Module {
@@ -76,6 +97,7 @@ interface Question {
     question: string
     answer: string
     is_most_likely: boolean
+    visual_search_query?: string | null
 }
 
 interface Flashcard {
@@ -83,6 +105,181 @@ interface Flashcard {
     module_id: string
     front: string
     back: string
+}
+
+// Helper to parse Markdown text into docx Paragraphs/Tables
+function parseMarkdownToDocx(text: string): (Paragraph | Table)[] {
+    const lines = text.split('\n')
+    const nodes: (Paragraph | Table)[] = []
+    let tableRows: TableRow[] = []
+    let inTable = false
+
+    const parseText = (lineText: string): TextRun[] => {
+        // Split by ** for bold
+        const parts = lineText.split(/(\*\*.*?\*\*)/g)
+        return parts.map(part => {
+            if (part.startsWith('**') && part.endsWith('**')) {
+                return new TextRun({
+                    text: part.slice(2, -2),
+                    bold: true
+                })
+            }
+            return new TextRun({ text: part })
+        })
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim()
+
+        // Table handling (basic support)
+        if (line.startsWith('|')) {
+            inTable = true
+            // Remove outer pipes if they exist, simple split
+            const rowContent = line.replace(/^\||\|$/g, '')
+            if (line.includes('---')) continue // Skip separator lines like |---|---|
+
+            const cells = rowContent.split('|').map(c => new TableCell({
+                children: [new Paragraph({ children: parseText(c.trim()) })],
+                borders: {
+                    top: { style: BorderStyle.SINGLE, size: 1, color: "cccccc" },
+                    bottom: { style: BorderStyle.SINGLE, size: 1, color: "cccccc" },
+                    left: { style: BorderStyle.SINGLE, size: 1, color: "cccccc" },
+                    right: { style: BorderStyle.SINGLE, size: 1, color: "cccccc" },
+                },
+                margins: { top: 100, bottom: 100, left: 100, right: 100 }
+            }))
+            tableRows.push(new TableRow({ children: cells }))
+            continue
+        } else if (inTable) {
+            if (tableRows.length > 0) {
+                nodes.push(new Table({
+                    rows: tableRows,
+                    width: { size: 100, type: WidthType.PERCENTAGE }
+                }))
+                nodes.push(new Paragraph({ text: "" })) // Spacer
+            }
+            tableRows = []
+            inTable = false
+        }
+
+        // List handling
+        if (line.startsWith('- ') || line.startsWith('* ')) {
+            nodes.push(new Paragraph({
+                children: parseText(line.slice(2)),
+                bullet: { level: 0 }
+            }))
+        } else if (line.startsWith('### ')) {
+            nodes.push(new Paragraph({
+                children: parseText(line.slice(4)),
+                heading: HeadingLevel.HEADING_3,
+                spacing: { before: 200, after: 100 }
+            }))
+        } else if (line.length > 0) {
+            nodes.push(new Paragraph({
+                children: parseText(line),
+                spacing: { after: 120 }
+            }))
+        }
+    }
+
+    if (inTable && tableRows.length > 0) {
+        nodes.push(new Table({
+            rows: tableRows,
+            width: { size: 100, type: WidthType.PERCENTAGE }
+        }))
+    }
+
+    return nodes
+}
+
+// Export Q&A as professional Word Document
+async function exportToWord(subjectName: string, modules: Module[], questions: Question[]) {
+    const children: (Paragraph | Table)[] = []
+
+    // Title Page / Header
+    children.push(
+        new Paragraph({
+            text: `${subjectName} - Exam Preparation`,
+            heading: HeadingLevel.TITLE,
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 300 }
+        }),
+        new Paragraph({
+            text: `Generated by StudentHub on ${new Date().toLocaleDateString()}`,
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 500 }
+        })
+    )
+
+    modules.filter(m => m.status === 'ready').forEach(module => {
+        const moduleQuestions = questions.filter(q => q.module_id === module.id)
+        if (moduleQuestions.length === 0) return
+
+        // Module Header
+        children.push(
+            new Paragraph({
+                text: module.name,
+                heading: HeadingLevel.HEADING_1,
+                spacing: { before: 400, after: 200 },
+                border: {
+                    bottom: { style: BorderStyle.SINGLE, size: 6, color: "888888" }
+                }
+            })
+        )
+
+        moduleQuestions.forEach((q, index) => {
+            // Question Heading
+            const qRuns = [
+                new TextRun({ text: `Q${index + 1}: `, bold: true, size: 24 }),
+                new TextRun({ text: q.question, bold: true, size: 24 })
+            ]
+
+            if (q.is_most_likely) {
+                qRuns.push(new TextRun({
+                    text: " [MOST LIKELY]",
+                    color: "FF0000",
+                    bold: true,
+                    size: 20
+                }))
+            }
+
+            children.push(
+                new Paragraph({
+                    children: qRuns,
+                    spacing: { before: 300, after: 100 },
+                    keepNext: true
+                })
+            )
+
+            // Answer Content (Parsed Markdown)
+            const answerNodes = parseMarkdownToDocx(q.answer)
+            children.push(...answerNodes)
+
+            // Separator
+            children.push(new Paragraph({
+                border: { bottom: { style: BorderStyle.DOTTED, size: 1, space: 1, color: "cccccc" } },
+                spacing: { before: 100, after: 100 }
+            }))
+        })
+    })
+
+    const doc = new DocxDocument({
+        sections: [{
+            properties: { type: SectionType.CONTINUOUS },
+            children: children
+        }]
+    })
+
+    // Generate and Download
+    const blob = await Packer.toBlob(doc)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${subjectName.replace(/[^a-zA-Z0-9]/g, '_')}_ExamPrep.docx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
 }
 
 interface ModuleFile {
@@ -108,6 +305,9 @@ export default function SubjectDetailPage() {
     const [loading, setLoading] = useState(true)
     const [uploading, setUploading] = useState<string | null>(null)
     const [processing, setProcessing] = useState<string | null>(null)
+    const [subjectQuestions, setSubjectQuestions] = useState('')
+    const [isSavingSubjectQuestions, setIsSavingSubjectQuestions] = useState(false)
+    const [showSubjectQuestions, setShowSubjectQuestions] = useState(false)
 
     const supabase = createClient()
 
@@ -128,6 +328,7 @@ export default function SubjectDetailPage() {
                 return
             }
             setSubject(subjectData)
+            setSubjectQuestions(subjectData.important_questions || '')
 
             // Fetch modules
             const { data: modulesData } = await supabase
@@ -175,6 +376,25 @@ export default function SubjectDetailPage() {
     useEffect(() => {
         fetchData()
     }, [fetchData])
+
+    const saveSubjectQuestions = async () => {
+        setIsSavingSubjectQuestions(true)
+        try {
+            const { error } = await supabase
+                .from('exam_subjects')
+                .update({ important_questions: subjectQuestions })
+                .eq('id', subjectId)
+
+            if (error) throw error
+            toast.success('Subject strategy saved!')
+            setSubject(prev => prev ? { ...prev, important_questions: subjectQuestions } : null)
+        } catch (error) {
+            console.error('Save error:', error)
+            toast.error('Failed to save strategy')
+        } finally {
+            setIsSavingSubjectQuestions(false)
+        }
+    }
 
     useEffect(() => {
         if (flashcardModuleId) return
@@ -244,10 +464,7 @@ export default function SubjectDetailPage() {
     const handleReprocess = async (moduleId: string) => {
         // Find module files
         const files = moduleFiles.filter(f => f.module_id === moduleId)
-        if (files.length === 0) {
-            toast.error('No files to process')
-            return
-        }
+        // Allow reprocessing even without files (Topic Generation)
 
         const filePaths = files.map(f => f.file_path)
         setProcessing(moduleId)
@@ -288,7 +505,7 @@ export default function SubjectDetailPage() {
             const response = await fetch('/api/exam-prep/process', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ moduleId, filePaths }) // Sending array of paths
+                body: JSON.stringify({ moduleId, filePaths })
             })
 
             if (!response.ok) {
@@ -335,6 +552,31 @@ export default function SubjectDetailPage() {
         }
     }
 
+    const handleShrinkSummary = async (moduleId: string, currentSummary: string) => {
+        const toastId = toast.loading('Condensing summary...')
+        try {
+            const response = await fetch('/api/exam-prep/shrink-summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ moduleId, currentSummary })
+            })
+
+            if (!response.ok) throw new Error('Failed to shrink summary')
+
+            const { summary } = await response.json()
+
+            // Update local state
+            setModules(prev => prev.map(m =>
+                m.id === moduleId ? { ...m, summary } : m
+            ))
+
+            toast.success('Summary condensed!', { id: toastId })
+        } catch (error) {
+            console.error(error)
+            toast.error('Failed to shrink summary', { id: toastId })
+        }
+    }
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-[50vh]">
@@ -366,6 +608,46 @@ export default function SubjectDetailPage() {
                     </p>
                 </div>
             </div>
+
+            {/* Subject Strategy & Important Questions */}
+            <Card className="glass-card border-amber-500/20 bg-amber-500/5">
+                <CardHeader className="py-3 cursor-pointer" onClick={() => setShowSubjectQuestions(!showSubjectQuestions)}>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Target className="h-5 w-5 text-amber-400" />
+                            <CardTitle className="text-base">Exam Strategy & Syllabus Context</CardTitle>
+                        </div>
+                        {showSubjectQuestions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </div>
+                </CardHeader>
+                {showSubjectQuestions && (
+                    <CardContent className="pt-0 pb-4 animate-in slide-in-from-top-2">
+                        <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                                Paste the **syllabus**, **midterm/endterm important questions**, or **recurring themes** here.
+                                This context will be used for EVERY module generation in this subject.
+                            </p>
+                            <Textarea
+                                value={subjectQuestions}
+                                onChange={(e) => setSubjectQuestions(e.target.value)}
+                                placeholder="E.g., 'For Midterms, focus on Unit 1 & 2 definitions. For Endterms, Unit 5 applications are key. Important questions: Explain MVC architecture...'"
+                                className="min-h-[100px] bg-black/20 border-amber-500/20 focus:border-amber-500/50"
+                            />
+                            <div className="flex justify-end">
+                                <Button
+                                    size="sm"
+                                    onClick={saveSubjectQuestions}
+                                    disabled={isSavingSubjectQuestions}
+                                    className="bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border-amber-500/20 border"
+                                >
+                                    {isSavingSubjectQuestions ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <Sparkles className="h-3 w-3 mr-2" />}
+                                    Save Strategy
+                                </Button>
+                            </div>
+                        </div>
+                    </CardContent>
+                )}
+            </Card>
 
             {/* Progress Card */}
             <Card className="glass-card">
@@ -412,7 +694,7 @@ export default function SubjectDetailPage() {
                     </TabsTrigger>
                     <TabsTrigger value="notes" className="gap-2">
                         <FileText className="h-4 w-4" />
-                        <span className="hidden sm:inline">Notes</span>
+                        <span className="hidden sm:inline">Summary</span>
                     </TabsTrigger>
                 </TabsList>
 
@@ -442,16 +724,30 @@ export default function SubjectDetailPage() {
                             </CardContent>
                         </Card>
                     ) : (
-                        modules.filter(m => m.status === 'ready').map((module) => {
-                            const moduleQuestions = questions.filter(q => q.module_id === module.id)
-                            return (
-                                <QuestionSection
-                                    key={module.id}
-                                    module={module}
-                                    questions={moduleQuestions}
-                                />
-                            )
-                        })
+                        <>
+                            {/* Export Button */}
+                            <div className="flex justify-end">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => exportToWord(subject.name, modules, questions)}
+                                    className="gap-2"
+                                >
+                                    <Download className="h-4 w-4" />
+                                    Export to Word
+                                </Button>
+                            </div>
+                            {modules.filter(m => m.status === 'ready').map((module) => {
+                                const moduleQuestions = questions.filter(q => q.module_id === module.id)
+                                return (
+                                    <QuestionSection
+                                        key={module.id}
+                                        module={module}
+                                        questions={moduleQuestions}
+                                    />
+                                )
+                            })}
+                        </>
                     )}
                 </TabsContent>
 
@@ -515,21 +811,45 @@ export default function SubjectDetailPage() {
                         </Card>
                     ) : (
                         modules.filter(m => m.status === 'ready' && m.summary).map((module) => (
-                            <Card key={module.id} className="glass-card">
-                                <CardHeader>
-                                    <CardTitle className="text-lg flex items-center gap-2">
-                                        <FileText className="h-5 w-5 text-blue-400" />
-                                        {module.name}
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="prose prose-invert max-w-none">
-                                        <pre className="whitespace-pre-wrap text-sm text-muted-foreground bg-muted/50 rounded-lg p-4">
-                                            {module.summary}
-                                        </pre>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <Collapsible key={module.id} defaultOpen className="group/collapsible">
+                                <Card className="glass-card">
+                                    <CardHeader className="py-4">
+                                        <div className="flex items-center justify-between w-full">
+                                            <CollapsibleTrigger asChild>
+                                                <Button variant="ghost" className="p-0 hover:bg-transparent flex-1 justify-start gap-2 h-auto font-semibold text-lg">
+                                                    <ChevronDown className="h-5 w-5 text-muted-foreground transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
+                                                    <span className="flex items-center gap-2 text-foreground">
+                                                        <FileText className="h-5 w-5 text-blue-400" />
+                                                        {module.name}
+                                                    </span>
+                                                </Button>
+                                            </CollapsibleTrigger>
+
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 gap-2 text-xs ml-2"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    handleShrinkSummary(module.id, module.summary || '')
+                                                }}
+                                            >
+                                                <Sparkles className="h-3 w-3 text-amber-500" />
+                                                <span className="hidden sm:inline">Shrink</span>
+                                            </Button>
+                                        </div>
+                                    </CardHeader>
+                                    <CollapsibleContent>
+                                        <CardContent>
+                                            <div className="prose prose-invert max-w-none prose-pre:bg-muted/50 prose-pre:text-muted-foreground">
+                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                                    {module.summary}
+                                                </ReactMarkdown>
+                                            </div>
+                                        </CardContent>
+                                    </CollapsibleContent>
+                                </Card>
+                            </Collapsible>
                         ))
                     )}
                 </TabsContent>
@@ -594,103 +914,125 @@ function ModuleCard({
             "glass-card transition-all duration-300",
             module.status === 'ready' && "border-emerald-500/30"
         )}>
-            <CardContent className="py-4">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className={cn(
-                            "w-10 h-10 rounded-xl flex items-center justify-center font-bold",
-                            module.status === 'ready' ? "bg-emerald-500/10 text-emerald-400" : "bg-muted text-muted-foreground"
-                        )}>
-                            {module.module_number}
-                        </div>
-                        <div>
-                            <p className="font-medium">{module.name}</p>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                {getStatusIcon()}
-                                <span>{getStatusText()}</span>
-                            </div>
+            <CardContent className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-black/20 gap-3 sm:gap-0">
+                {/* Left: Module Info */}
+                <div className="flex items-center gap-3 w-full sm:w-auto overflow-hidden">
+                    <div className={cn(
+                        "w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-bold shrink-0",
+                        module.status === 'ready' ? "bg-emerald-500/10 text-emerald-400" : "bg-muted text-muted-foreground"
+                    )}>
+                        {module.module_number}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <p className="font-medium leading-none mb-1 truncate">{module.name}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
+                            {getStatusIcon()}
+                            <span className="truncate">{getStatusText()}</span>
                         </div>
                     </div>
+                </div>
 
-                    <div className="flex items-center gap-2">
-                        {files.length > 0 && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="h-8 gap-2">
-                                        <File className="h-4 w-4" />
-                                        {files.length} file{files.length !== 1 ? 's' : ''}
-                                        <ChevronDown className="h-3 w-3" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-64 max-h-60 overflow-y-auto">
-                                    <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">Uploaded Files</DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                    {files.map((file) => (
-                                        <DropdownMenuItem key={file.id} className="flex flex-col items-start gap-1 p-2 focus:bg-accent cursor-default">
-                                            <div className="flex items-center gap-2 w-full">
-                                                <File className="h-3 w-3 text-blue-400 shrink-0" />
-                                                <span className="truncate text-sm flex-1">{file.file_name}</span>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-6 w-6 shrink-0 hover:bg-destructive/10 hover:text-destructive"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        onDeleteFile(file.id, file.file_path)
-                                                    }}
-                                                >
-                                                    <Trash2 className="h-3 w-3" />
-                                                </Button>
-                                            </div>
-                                            {file.created_at && (
-                                                <span className="text-[10px] text-muted-foreground pl-5">
-                                                    {new Date(file.created_at).toLocaleDateString()}
-                                                </span>
-                                            )}
-                                        </DropdownMenuItem>
-                                    ))}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        )}
-                        {/* Action Buttons */}
-                        {(module.status === 'ready' || module.status === 'error') && (
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={onReprocess}
-                                disabled={processing}
-                                className="gap-2"
-                            >
-                                <Sparkles className="h-4 w-4 text-purple-400" />
-                                Regenerate
-                            </Button>
-                        )}
-                        <label>
-                            <input
-                                type="file"
-                                accept=".pdf,.ppt,.pptx"
-                                multiple
-                                onChange={handleFileChange}
-                                className="hidden"
-                                disabled={uploading || processing || module.status === 'processing'}
-                            />
-                            <Button
-                                variant={module.status === 'ready' ? 'outline' : 'default'}
-                                size="sm"
-                                className={cn(
-                                    "cursor-pointer",
-                                    module.status !== 'ready' && "gradient-primary text-white"
-                                )}
-                                disabled={uploading || processing || module.status === 'processing'}
-                                asChild
-                            >
-                                <span>
-                                    <Upload className="h-4 w-4 mr-2" />
-                                    {module.status === 'ready' || files.length > 0 ? 'Add / Replace' : 'Upload'}
+                {/* Right: Actions & Files */}
+                <div className="flex items-center justify-end gap-2 w-full sm:w-auto ml-auto">
+                    {files.length > 0 && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground hover:text-foreground px-2">
+                                    <File className="h-4 w-4" />
+                                    <span className="text-xs">{files.length}</span>
+                                    <ChevronDown className="h-3 w-3" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-64 max-h-60 overflow-y-auto">
+                                <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">Uploaded Files</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {files.map((file) => (
+                                    <DropdownMenuItem key={file.id} className="flex flex-col items-start gap-1 p-2 focus:bg-accent cursor-default">
+                                        <div className="flex items-center gap-2 w-full">
+                                            <File className="h-3 w-3 text-blue-400 shrink-0" />
+                                            <span className="truncate text-sm flex-1">{file.file_name}</span>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 shrink-0 hover:bg-destructive/10 hover:text-destructive"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    onDeleteFile(file.id, file.file_path)
+                                                }}
+                                            >
+                                                <Trash2 className="h-3 w-3" />
+                                            </Button>
+                                        </div>
+                                        {file.created_at && (
+                                            <span className="text-[10px] text-muted-foreground pl-5">
+                                                {new Date(file.created_at).toLocaleDateString()}
+                                            </span>
+                                        )}
+                                    </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
+
+                    {(module.status === 'ready' || module.status === 'error') && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={onReprocess}
+                            disabled={processing}
+                            className="gap-2 border-white/10 hover:bg-white/5 h-8 px-2 sm:px-3"
+                        >
+                            <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                            <span className="hidden sm:inline">Regenerate</span>
+                        </Button>
+                    )}
+
+                    {/* Generate without files (Topic Based) */}
+                    {module.status !== 'ready' && module.status !== 'processing' && files.length === 0 && (
+                        <Button
+                            size="sm"
+                            variant="default"
+                            onClick={onReprocess}
+                            disabled={processing}
+                            className="gap-2 h-8 px-3 bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-500/50 shadow-lg shadow-indigo-500/20"
+                        >
+                            <Sparkles className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">Generate from Topic</span>
+                            <span className="inline sm:hidden">Generate</span>
+                        </Button>
+                    )}
+
+                    <label>
+                        <input
+                            type="file"
+                            accept=".pdf,.ppt,.pptx"
+                            multiple
+                            onChange={handleFileChange}
+                            className="hidden"
+                            disabled={uploading || processing || module.status === 'processing'}
+                        />
+                        <Button
+                            variant={module.status === 'ready' ? 'secondary' : 'outline'}
+                            size="sm"
+                            className={cn(
+                                "cursor-pointer gap-2 h-8 px-3 whitespace-nowrap",
+                                module.status !== 'ready' && files.length > 0 && "gradient-primary text-white border-0",
+                                module.status !== 'ready' && files.length === 0 && "border-dashed border-muted-foreground/50 hover:border-primary/50 text-muted-foreground hover:text-primary hover:bg-primary/5"
+                            )}
+                            disabled={uploading || processing || module.status === 'processing'}
+                            asChild
+                        >
+                            <span>
+                                <Upload className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline">
+                                    {module.status === 'ready' || files.length > 0 ? 'Upload / Replace' : 'Upload Materials'}
                                 </span>
-                            </Button>
-                        </label>
-                    </div>
+                                <span className="inline sm:hidden">
+                                    Upload
+                                </span>
+                            </span>
+                        </Button>
+                    </label>
                 </div>
             </CardContent>
         </Card>
@@ -738,21 +1080,46 @@ function QuestionCard({ question }: { question: Question }) {
                 ? "border-amber-500/50 bg-amber-500/5"
                 : "border-border bg-muted/30"
         )}>
-            <div className="flex items-start gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                 {question.is_most_likely && (
-                    <div className="shrink-0 mt-0.5">
-                        <div className="flex items-center gap-1 text-xs font-medium text-amber-400 bg-amber-500/10 px-2 py-1 rounded-full">
+                    <div className="shrink-0">
+                        <div className="inline-flex items-center gap-1 text-xs font-medium text-amber-400 bg-amber-500/10 px-2 py-1 rounded-full">
                             <Star className="h-3 w-3 fill-amber-400" />
                             Most Likely
                         </div>
                     </div>
                 )}
-                <div className="flex-1 space-y-3">
-                    <p className="font-medium">{question.question}</p>
+                <div className="flex-1 space-y-3 min-w-0 w-full">
+                    <p className="font-medium break-words">{question.question}</p>
 
                     {showAnswer ? (
                         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
-                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{question.answer}</p>
+                            <div className="text-sm text-muted-foreground prose prose-invert max-w-none prose-p:my-1 prose-pre:bg-black/50 overflow-hidden">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                    {question.answer}
+                                </ReactMarkdown>
+                            </div>
+
+                            {/* Visual Diagram Button */}
+                            {question.visual_search_query && (
+                                <div className="mt-3 pt-3 border-t border-emerald-500/20 flex justify-end">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-2 h-7 text-xs border-emerald-500/30 hover:bg-emerald-500/20 hover:text-emerald-400"
+                                        asChild
+                                    >
+                                        <a
+                                            href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(question.visual_search_query)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            <ExternalLink className="h-3 w-3" />
+                                            View Diagram
+                                        </a>
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <Button

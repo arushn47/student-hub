@@ -29,17 +29,16 @@ export async function POST(request: Request) {
         const truncatedText = text.slice(0, 2000)
 
         const prompt = `You are a helpful tutor. A student has highlighted the following text and wants you to explain it in simple terms.
+            Text to explain:
+            "${truncatedText}"
 
-Text to explain:
-"${truncatedText}"
+            Provide a clear, simple explanation that:
+            1. Breaks down complex concepts into easy-to-understand parts
+            2. Uses everyday analogies when helpful
+            3. Is concise but thorough
+            4. Addresses any technical terms
 
-Provide a clear, simple explanation that:
-1. Breaks down complex concepts into easy-to-understand parts
-2. Uses everyday analogies when helpful
-3. Is concise but thorough
-4. Addresses any technical terms
-
-Keep your explanation focused and educational.`
+            Keep your explanation focused and educational.`
 
         const explanation = await generateText(prompt)
 

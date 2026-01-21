@@ -31,6 +31,7 @@ export interface Task {
     parent_task_id: string | null
     created_at: string
     updated_at: string
+    google_task_id?: string
 }
 
 // Class Schedule

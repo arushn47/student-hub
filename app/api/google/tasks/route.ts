@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getTasksClient, GoogleTokens } from '@/lib/google'
+import { getTasksClient } from '@/lib/google'
+import { getGoogleTokensForService } from '@/lib/google-accounts'
 
 // GET: Fetch tasks from Google Tasks (all lists)
 export async function GET() {
@@ -12,17 +13,12 @@ export async function GET() {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('google_tokens, google_connected')
-            .eq('id', user.id)
-            .single()
+        const { tokens } = await getGoogleTokensForService(user.id, 'tasks')
 
-        if (!profile?.google_connected || !profile?.google_tokens) {
-            return NextResponse.json({ error: 'Google not connected' }, { status: 400 })
+        if (!tokens) {
+            return NextResponse.json({ error: 'No Google account connected for Tasks' }, { status: 400 })
         }
 
-        const tokens = profile.google_tokens as GoogleTokens
         const tasksClient = getTasksClient(tokens)
 
         // Get ALL task lists
@@ -83,17 +79,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('google_tokens, google_connected')
-            .eq('id', user.id)
-            .single()
+        const { tokens } = await getGoogleTokensForService(user.id, 'tasks')
 
-        if (!profile?.google_connected || !profile?.google_tokens) {
-            return NextResponse.json({ error: 'Google not connected' }, { status: 400 })
+        if (!tokens) {
+            return NextResponse.json({ error: 'No Google account connected for Tasks' }, { status: 400 })
         }
 
-        const tokens = profile.google_tokens as GoogleTokens
         const tasksClient = getTasksClient(tokens)
 
         const body = await req.json()
@@ -147,17 +138,12 @@ export async function PATCH(req: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('google_tokens, google_connected')
-            .eq('id', user.id)
-            .single()
+        const { tokens } = await getGoogleTokensForService(user.id, 'tasks')
 
-        if (!profile?.google_connected || !profile?.google_tokens) {
-            return NextResponse.json({ error: 'Google not connected' }, { status: 400 })
+        if (!tokens) {
+            return NextResponse.json({ error: 'No Google account connected for Tasks' }, { status: 400 })
         }
 
-        const tokens = profile.google_tokens as GoogleTokens
         const tasksClient = getTasksClient(tokens)
 
         const body = await req.json()

@@ -13,6 +13,7 @@ interface GeneratedContent {
         question: string
         answer: string
         is_most_likely: boolean
+        visual_search_query?: string
     }[]
     flashcards: {
         front: string
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
         stage = 'request.json'
         const body = await request.json().catch(() => ({}))
         const moduleId = body?.moduleId
+
 
         if (!moduleId) {
             return NextResponse.json({ error: 'Missing moduleId' }, { status: 400 })
@@ -68,122 +70,186 @@ export async function POST(request: Request) {
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: true })
 
-            if (filesError || !moduleFiles || moduleFiles.length === 0) {
-                return NextResponse.json({ error: 'No files found for this module' }, { status: 400 })
-            }
-
-            filePaths = moduleFiles.map(f => f.file_path)
+            filePaths = moduleFiles ? moduleFiles.map(f => f.file_path) : []
         }
 
         // Construct the parts
         const parts: (string | Part)[] = []
 
-                const subjectName = module.exam_subjects?.name || 'this subject'
-                const examType = module.exam_subjects?.exam_type || 'endterm'
-                const mostLikelyCount = module.exam_subjects?.questions_per_module ?? 1
-                const marksPerQuestion = module.exam_subjects?.marks_per_question ?? 10
-                const maxQuestions = 10
-                const flashcardsPerModule = Math.max(12, maxQuestions * 2)
+        const subjectName = module.exam_subjects?.name || 'this subject'
+        const examType = module.exam_subjects?.exam_type || 'endterm'
+        const mostLikelyCount = module.exam_subjects?.questions_per_module ?? 1
+        const marksPerQuestion = module.exam_subjects?.marks_per_question ?? 10
+        const maxQuestions = 10
+        const flashcardsPerModule = 15
 
-                const examTypeGuidance: Record<string, string> = {
-                        midterm: 'Midterm: focus on likely short/medium questions, core definitions, and typical problem patterns.',
-                        endterm: 'Endterm: include broader coverage, integration questions, and exam-style long answers where relevant.',
-                        quiz: 'Quiz: focus on concise, high-yield questions and quick recall flashcards.',
-                        final: 'Final: treat like endterm with comprehensive coverage and tricky edge cases.',
+        const examTypeGuidance: Record<string, string> = {
+            midterm: 'Midterm: focus on likely short/medium questions, core definitions, and typical problem patterns.',
+            endterm: 'Endterm: include broader coverage, integration questions, and exam-style long answers where relevant.',
+            quiz: 'Quiz: focus on concise, high-yield questions and quick recall flashcards.',
+            final: 'Final: treat like endterm with comprehensive coverage and tricky edge cases.',
+        }
+
+        // Add important topics instruction if provided (Global Subject Level + Module Level)
+        const subjectImportantQuestions = module.exam_subjects?.important_questions || ''
+        const globalContextSection = subjectImportantQuestions
+            ? `\n\nSUBJECT-WIDE IMPORTANT MIDTERM/ENDTERM QUESTIONS & SYLLABUS CONTEXT:\n${subjectImportantQuestions}\n`
+            : ''
+
+        const systemPrompt = `You are an expert exam-prep assistant.
+
+            Generate content for:
+            - Subject: ${subjectName}
+            - Module: ${module.name} (Module ${module.module_number})
+            - Exam type: ${examType}
+
+            Guidance: ${examTypeGuidance[examType] || examTypeGuidance.endterm}${globalContextSection}
+
+            Return ONLY valid JSON with this exact schema:
+            {
+                "questions": [
+                    {"question": "string", "answer": "string", "is_most_likely": boolean, "visual_search_query": "string (optional)"}
+                ],
+                "flashcards": [
+                    {"front": "string", "back": "string"}
+                ],
+                "summary": "string"
+            }
+
+            Rules:
+            - Create as many questions as needed to cover the module, but cap at ${maxQuestions} total.
+            - Mark EXACTLY ${mostLikelyCount} questions as is_most_likely=true.
+            - All other questions must have is_most_likely=false.
+            - Each question should be worth ~${marksPerQuestion} marks.
+            - Create AT LEAST 10 flashcards (aim for ${flashcardsPerModule}). Focus on definitions and key terms.
+            - Make flashcards specific to THIS module only.
+            - For the "summary" field, generate a **"Ultra-Concise Quick Recap"**:
+                - **MAXIMUM 150 WORDS.**
+                - Use purely **bullet points** and **tables**.
+                - Focus ONLY on high-yield comparisons, formulas, or "tricks" to remember concepts.
+                - NO long paragraphs.
+            - Keep answers clear, structured, and exam-ready.${subjectImportantQuestions ? '\n- PRIORITIZE the important topics/questions provided above when creating questions and flashcards.' : ''}
+            - If provided with PDF images, pay special attention to any **HIGHLIGHTED TEXT** (yellow/colored backgrounds) or red-circled items, as these are strict syllabus priority areas.
+            - If a question would benefit from a visual diagram (e.g. "Draw the architecture of X", "Explain the cycle of Y"), provide a specific Google Image search query in 'visual_search_query' (e.g. "labeled diagram of von neumann architecture"). Otherwise leave it null.
+            - Return pure JSON.`
+
+        parts.push(systemPrompt)
+
+        // Process Syllabus File (if exists)
+        const syllabusPath = module.exam_subjects?.syllabus_path
+        if (syllabusPath) {
+            try {
+                const normalizedSyllabusPath = normalizeStoragePath(syllabusPath)
+                stage = `storage.download.syllabus:${normalizedSyllabusPath}`
+                const { data: syllabusData, error: syllabusError } = await supabase.storage
+                    .from('exam-pdfs')
+                    .download(normalizedSyllabusPath)
+
+                if (!syllabusError && syllabusData) {
+                    const buffer = await syllabusData.arrayBuffer()
+                    const base64 = Buffer.from(buffer).toString('base64')
+                    const ext = normalizedSyllabusPath.split('.').pop()?.toLowerCase()
+                    let mimeType = 'application/pdf'
+                    if (ext === 'png') mimeType = 'image/png'
+                    if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg'
+
+                    parts.push({
+                        text: "SYLLABUS DOCUMENT (Use this to prioritize questions and scope):"
+                    })
+                    parts.push({
+                        inlineData: {
+                            data: base64,
+                            mimeType
+                        }
+                    })
+                    console.log(`Attached syllabus: ${normalizedSyllabusPath} (${mimeType})`)
                 }
-
-                const systemPrompt = `You are an expert exam-prep assistant.
-
-Generate content for:
-- Subject: ${subjectName}
-- Module: ${module.name} (Module ${module.module_number})
-- Exam type: ${examType}
-
-Guidance: ${examTypeGuidance[examType] || examTypeGuidance.endterm}
-
-Return ONLY valid JSON with this exact schema:
-{
-    "questions": [
-        {"question": "string", "answer": "string", "is_most_likely": boolean}
-    ],
-    "flashcards": [
-        {"front": "string", "back": "string"}
-    ],
-    "summary": "string"
-}
-
-Rules:
-- Create as many questions as needed to cover the module, but cap at ${maxQuestions} total.
-- Mark EXACTLY ${mostLikelyCount} questions as is_most_likely=true.
-- All other questions must have is_most_likely=false.
-- Each question should be worth ~${marksPerQuestion} marks.
-- Create EXACTLY ${flashcardsPerModule} flashcards for this module (no more, no less).
-- Make flashcards specific to THIS module only.
-- Make summary point-wise, each point on a new line prefixed with "- ".
-- Keep answers clear, structured, and exam-ready.
-- No markdown, no code fences, no extra keys.`
-
-                parts.push(systemPrompt)
+            } catch (e) {
+                console.error('Error processing syllabus:', e)
+                // Continue without syllabus if it fails
+            }
+        }
 
         let addedAnyFileContent = false
         const skippedFiles: { filePath: string; reason: string }[] = []
 
         // Download and add files as parts
-        for (const filePath of filePaths) {
-            try {
-                const normalizedPath = normalizeStoragePath(filePath)
-                // Ensure bucket name matches
-                stage = `storage.download:${normalizedPath}`
-                const { data: fileData, error: downloadError } = await supabase.storage
-                    .from('exam-pdfs')
-                    .download(normalizedPath)
+        if (filePaths.length === 0) {
+            console.log('No files provided. Generating from topic solely.')
+            parts.push(`
+                WARNING: NO STUDY FILES WERE UPLOADED FOR THIS MODULE.
+                YOU MUST GENERATE CONTENT SOLELY BASED ON YOUR INTERNAL KNOWLEDGE.
+                
+                Context:
+                - Subject: ${subjectName}
+                - Module Topic: "${module.name}"
+                - Exam Type: ${examType}
+                
+                INSTRUCTIONS:
+                - You represent an expert professor in **${subjectName}**.
+                - Create questions, flashcards, and a summary that effectively cover the standard curriculum for the topic **"${module.name}"**.
+                - Ensure the questions range from fundamental concepts to advanced applications typical for this topic.
+                - Use the "Important Questions" context provided above if relevant.
+                `)
+            addedAnyFileContent = true
+        } else {
+            console.log(`Processing ${filePaths.length} files...`)
+            for (const filePath of filePaths) {
+                try {
+                    const normalizedPath = normalizeStoragePath(filePath)
+                    // Ensure bucket name matches
+                    stage = `storage.download:${normalizedPath}`
+                    const { data: fileData, error: downloadError } = await supabase.storage
+                        .from('exam-pdfs')
+                        .download(normalizedPath)
 
-                if (downloadError) {
-                    console.error(`Download failed for ${normalizedPath}: ${downloadError.message}`)
-                    skippedFiles.push({ filePath: normalizedPath, reason: `Download failed: ${downloadError.message}` })
-                    continue
-                }
+                    if (downloadError) {
+                        console.error(`Download failed for ${normalizedPath}: ${downloadError.message}`)
+                        skippedFiles.push({ filePath: normalizedPath, reason: `Download failed: ${downloadError.message}` })
+                        continue
+                    }
 
-                if (!fileData) {
-                    console.error(`No data for ${filePath}`)
-                    continue
-                }
+                    if (!fileData) {
+                        console.error(`No data for ${filePath}`)
+                        continue
+                    }
 
-                const buffer = await fileData.arrayBuffer()
-                const bytes = new Uint8Array(buffer)
+                    const buffer = await fileData.arrayBuffer()
+                    const bytes = new Uint8Array(buffer)
 
-                // Determine file type
-                const ext = normalizedPath.split('.').pop()?.toLowerCase()
-                const isPdf = ext === 'pdf'
+                    // Determine file type
+                    const ext = normalizedPath.split('.').pop()?.toLowerCase()
+                    const isPdf = ext === 'pdf'
 
-                if (isPdf) {
-                    stage = `file.pdf.base64:${normalizedPath}`
-                    const base64 = Buffer.from(buffer).toString('base64')
-                    parts.push({
-                        inlineData: {
-                            data: base64,
-                            mimeType: 'application/pdf',
-                        },
-                    })
+                    if (isPdf) {
+                        stage = `file.pdf.base64:${normalizedPath}`
+                        const base64 = Buffer.from(buffer).toString('base64')
+                        parts.push({
+                            inlineData: {
+                                data: base64,
+                                mimeType: 'application/pdf',
+                            },
+                        })
+                        addedAnyFileContent = true
+                        continue
+                    }
+
+                    // Gemini does not accept PPT/PPTX as inlineData.
+                    // Extract text server-side (PPTX/DOCX only) and send as plain text.
+                    stage = `file.office.extractText:${normalizedPath}`
+                    const extractedText = await extractOfficeText(bytes, ext || '')
+                    const cleaned = (extractedText || '').trim()
+                    if (!cleaned) {
+                        skippedFiles.push({ filePath: normalizedPath, reason: 'Unsupported file type or no text extracted' })
+                        continue
+                    }
+
+                    parts.push(`\n\n[File: ${normalizedPath}]\n${cleaned}`)
                     addedAnyFileContent = true
-                    continue
+
+                } catch (err) {
+                    console.error(`Error processing file ${filePath}:`, err)
                 }
-
-                // Gemini does not accept PPT/PPTX as inlineData.
-                // Extract text server-side (PPTX/DOCX only) and send as plain text.
-                stage = `file.office.extractText:${normalizedPath}`
-                const extractedText = await extractOfficeText(bytes, ext || '')
-                const cleaned = (extractedText || '').trim()
-                if (!cleaned) {
-                    skippedFiles.push({ filePath: normalizedPath, reason: 'Unsupported file type or no text extracted' })
-                    continue
-                }
-
-                parts.push(`\n\n[File: ${normalizedPath}]\n${cleaned}`)
-                addedAnyFileContent = true
-
-            } catch (err) {
-                console.error(`Error processing file ${filePath}:`, err)
             }
         }
 
@@ -200,7 +266,7 @@ Rules:
 
         stage = 'gemini.generateJSON'
         const expectedMostLikely = module.exam_subjects?.questions_per_module ?? 1
-        const expectedFlashcards = Math.max(12, 10 * 2)
+        const expectedFlashcards = 15
         const result = await generateWithCountEnforcement(parts, {
             minQuestions: Math.max(1, expectedMostLikely),
             maxQuestions: 10,
@@ -320,7 +386,8 @@ async function generateWithCountEnforcement(
         last = normalized
 
         const hasEnoughQuestions = normalized.questions.length >= opts.minQuestions && normalized.questions.length <= opts.maxQuestions
-        const hasEnoughFlashcards = normalized.flashcards.length === opts.expectedFlashcards
+        // Relaxed validation: accept if we have at least 5 flashcards, don't enforce strict equality which causes retries
+        const hasEnoughFlashcards = normalized.flashcards.length >= 5
         const hasSummary = normalized.summary.trim().length > 0
 
         if (hasEnoughQuestions && hasEnoughFlashcards && hasSummary) {
@@ -407,15 +474,14 @@ function buildFallbackNotes(
 ): string {
     const lines: string[] = []
 
-    for (const f of flashcards.slice(0, 10)) {
-        lines.push(`- ${f.front}: ${f.back}`)
+    lines.push('### Key Concepts (Flashcards)')
+    for (const f of flashcards) {
+        lines.push(`- **${f.front}**: ${f.back}`)
     }
 
-    if (lines.length < 5) {
-        for (const q of questions.slice(0, 8)) {
-            const ans = q.answer.length > 140 ? `${q.answer.slice(0, 140)}…` : q.answer
-            lines.push(`- ${q.question} — ${ans}`)
-        }
+    lines.push('\n### Study Questions')
+    for (const q of questions) {
+        lines.push(`- **${q.question}**\n  ${q.answer}`)
     }
 
     return lines.join('\n')
@@ -425,11 +491,12 @@ function ensurePointWiseSummary(summary: string): string {
     const trimmed = (summary || '').trim()
     if (!trimmed) return ''
 
-    // If it already looks point-wise, keep it.
+    // If it already looks formatted (bullets, tables, headers), keep it.
     const lines = trimmed.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
-    const looksBullet = lines.some(l => l.startsWith('- ') || l.startsWith('• '))
-    if (looksBullet) {
-        return lines.map(l => (l.startsWith('• ') ? `- ${l.slice(2).trim()}` : l)).join('\n')
+    const hasMarkdown = lines.some(l => l.startsWith('- ') || l.startsWith('• ') || l.startsWith('#') || l.startsWith('|') || l.startsWith('**'))
+
+    if (hasMarkdown) {
+        return trimmed
     }
 
     // Fallback: split into sentences and bullet them.
@@ -455,7 +522,8 @@ async function saveGeneratedContent(
             user_id: userId,
             question: q.question,
             answer: q.answer,
-            is_most_likely: q.is_most_likely || false
+            is_most_likely: q.is_most_likely || false,
+            visual_search_query: q.visual_search_query || null
         }))
         await supabase.from('exam_questions').insert(questions)
     }

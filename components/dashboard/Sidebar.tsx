@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -46,30 +46,50 @@ interface SidebarProps {
             full_name?: string
             avatar_url?: string
         }
-    }
+    } | null
 }
 
-const navItems = [
-    // Home
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'violet' },
-    // Academics
-    { href: '/dashboard/notes', label: 'Notes', icon: FileText, color: 'blue' },
-    { href: '/dashboard/tasks', label: 'Tasks', icon: CheckSquare, color: 'emerald' },
-    { href: '/dashboard/assignments', label: 'Assignments', icon: ClipboardList, color: 'indigo' },
-    { href: '/dashboard/exam-prep', label: 'Exam Prep', icon: Target, color: 'amber' },
-    { href: '/dashboard/grades', label: 'Grades', icon: GraduationCap, color: 'pink' },
-    { href: '/dashboard/citations', label: 'Citations', icon: Quote, color: 'teal' },
-    // Schedule & Time
-    { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, color: 'cyan' },
-    { href: '/dashboard/timetable', label: 'Timetable', icon: Clock, color: 'purple' },
-    { href: '/dashboard/attendance', label: 'Attendance', icon: UserCheck, color: 'lime' },
-    { href: '/dashboard/settings/semesters', label: 'Semesters', icon: GraduationCap, color: 'fuchsia' },
-    { href: '/dashboard/reminders', label: 'Reminders', icon: Bell, color: 'yellow' },
-    { href: '/dashboard/pomodoro', label: 'Pomodoro', icon: Timer, color: 'rose' },
-    // Utility
-    { href: '/dashboard/resources', label: 'Resources', icon: FolderOpen, color: 'orange' },
-    { href: '/dashboard/budget', label: 'Budget', icon: Wallet, color: 'green' },
-    { href: '/dashboard/settings', label: 'Settings', icon: Settings, color: 'slate' },
+const navGroups = [
+    {
+        title: null, // "Overview" implied
+        items: [
+            { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'violet' },
+        ]
+    },
+    {
+        title: 'Academics',
+        items: [
+            { href: '/dashboard/exam-prep', label: 'Exam Prep', icon: Target, color: 'amber' },
+            { href: '/dashboard/tasks', label: 'Tasks', icon: CheckSquare, color: 'emerald' },
+            { href: '/dashboard/notes', label: 'Notes', icon: FileText, color: 'blue' },
+            { href: '/dashboard/assignments', label: 'Assignments', icon: ClipboardList, color: 'indigo' },
+            { href: '/dashboard/grades', label: 'Grades', icon: GraduationCap, color: 'pink' },
+            { href: '/dashboard/citations', label: 'Citations', icon: Quote, color: 'teal' },
+        ]
+    },
+    {
+        title: 'Campus Life',
+        items: [
+            { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, color: 'cyan' },
+            { href: '/dashboard/timetable', label: 'Timetable', icon: Clock, color: 'purple' },
+            { href: '/dashboard/attendance', label: 'Attendance', icon: UserCheck, color: 'lime' },
+        ]
+    },
+    {
+        title: 'Tools',
+        items: [
+            { href: '/dashboard/pomodoro', label: 'Focus Timer', icon: Timer, color: 'rose' },
+            { href: '/dashboard/reminders', label: 'Reminders', icon: Bell, color: 'yellow' },
+            { href: '/dashboard/budget', label: 'Budget', icon: Wallet, color: 'green' },
+        ]
+    },
+    {
+        title: 'System',
+        items: [
+            { href: '/dashboard/settings/semesters', label: 'Semesters', icon: GraduationCap, color: 'fuchsia' },
+            { href: '/dashboard/settings', label: 'Settings', icon: Settings, color: 'slate' },
+        ]
+    }
 ]
 
 const iconColors: Record<string, string> = {
@@ -111,6 +131,7 @@ const activeColors: Record<string, string> = {
 }
 
 import NProgress from 'nprogress'
+import { ClientOnly } from '../ClientOnly'
 
 function NavItem({
     href,
@@ -136,6 +157,11 @@ function NavItem({
         onClick?.()
     }
 
+    const [mounted, setMounted] = useState(false)
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
     return (
         <Link
             href={href}
@@ -145,22 +171,32 @@ function NavItem({
         >
             <div
                 className={cn(
-                    "group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 border border-transparent",
-                    "hover:bg-accent hover:border-border",
+                    "group flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 border border-transparent",
+                    "hover:bg-white/5 hover:border-white/5",
                     isActive
                         ? activeColors[color]
                         : "text-muted-foreground"
                 )}
             >
-                <Icon className={cn(
-                    "h-5 w-5 flex-shrink-0 transition-colors",
-                    isActive ? '' : iconColors[color]
-                )} />
+                <div className="flex items-center justify-center">
+                    {/* Hydration fix: Only render icon after mount to ensure match with server (which renders placeholder) */}
+                    {mounted ? (
+                        <Icon className={cn(
+                            "h-4 w-4 aspect-square flex-shrink-0 transition-colors",
+                            isActive ? '' : iconColors[color]
+                        )} />
+                    ) : (
+                        <div className="h-4 w-4 aspect-square" />
+                    )}
+                </div>
                 {!collapsed && (
-                    <span className={cn(
-                        "font-medium transition-colors",
-                        isActive ? '' : 'group-hover:text-foreground'
-                    )}>
+                    <span
+                        suppressHydrationWarning
+                        className={cn(
+                            "text-sm font-medium transition-colors",
+                            isActive ? '' : 'group-hover:text-foreground'
+                        )}
+                    >
                         {label}
                     </span>
                 )}
@@ -181,11 +217,11 @@ export function Sidebar({ user }: SidebarProps) {
         router.refresh()
     }
 
-    const userInitials = user.user_metadata?.full_name
+    const userInitials = user?.user_metadata?.full_name
         ?.split(' ')
         .map((n: string) => n[0])
         .join('')
-        .toUpperCase() || user.email?.[0].toUpperCase() || 'U'
+        .toUpperCase() || user?.email?.[0].toUpperCase() || 'G'
 
     return (
         <aside
@@ -212,7 +248,7 @@ export function Sidebar({ user }: SidebarProps) {
                 "flex items-center p-4 border-b border-sidebar-border h-[65px]",
                 collapsed ? "justify-center" : "justify-between"
             )}>
-                <div className="flex items-center gap-2 overflow-hidden">
+                <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden hover:opacity-80 transition-opacity">
                     <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center shrink-0">
                         <Sparkles className="h-4 w-4 text-white" />
                     </div>
@@ -221,69 +257,95 @@ export function Sidebar({ user }: SidebarProps) {
                             StudentHub
                         </h1>
                     )}
-                </div>
+                </Link>
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-                {navItems.map((item) => (
-                    <NavItem
-                        key={item.href}
-                        href={item.href}
-                        label={item.label}
-                        icon={item.icon}
-                        color={item.color}
-                        isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
-                        collapsed={collapsed}
-                    />
+            <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                {navGroups.map((group, i) => (
+                    <div key={i} className="space-y-1">
+                        {!collapsed && group.title && (
+                            <h4 className="px-3 text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider mb-2">
+                                {group.title}
+                            </h4>
+                        )}
+                        {collapsed && group.title && i > 0 && (
+                            <div className="h-px bg-white/5 my-2 mx-2" />
+                        )}
+                        {group.items.map((item) => (
+                            <NavItem
+                                key={item.href}
+                                href={item.href}
+                                label={item.label}
+                                icon={item.icon}
+                                color={item.color}
+                                isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
+                                collapsed={collapsed}
+                            />
+                        ))}
+                    </div>
                 ))}
             </nav>
 
             {/* User Menu */}
             <div className="p-3 border-t border-sidebar-border">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                {user ? (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                className={cn(
+                                    "w-full justify-start gap-3 px-3 py-6 hover:bg-white/[0.06] rounded-xl transition-all",
+                                    collapsed && "justify-center px-0"
+                                )}
+                            >
+                                <Avatar className="h-9 w-9 ring-2 ring-violet-500/20">
+                                    <AvatarImage src={user.user_metadata?.avatar_url} />
+                                    <AvatarFallback className="bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white font-medium">
+                                        {userInitials}
+                                    </AvatarFallback>
+                                </Avatar>
+                                {!collapsed && (
+                                    <div className="flex flex-col items-start text-left overflow-hidden">
+                                        <span className="text-sm font-medium text-foreground truncate w-full">
+                                            {user.user_metadata?.full_name || 'User'}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground truncate w-full">
+                                            {user.email}
+                                        </span>
+                                    </div>
+                                )}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 bg-popover backdrop-blur-xl border-border">
+                            <DropdownMenuLabel className="text-muted-foreground">My Account</DropdownMenuLabel>
+                            <DropdownMenuSeparator className="bg-border" />
+                            <DropdownMenuItem
+                                onClick={() => router.push('/dashboard/settings')}
+                                className="text-foreground focus:bg-accent cursor-pointer"
+                            >
+                                <Settings className="mr-2 h-4 w-4" />
+                                Settings
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleLogout} className="text-rose-500 focus:bg-rose-500/10 focus:text-rose-500 cursor-pointer">
+                                <LogOut className="mr-2 h-4 w-4" />
+                                Logout
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                ) : (
+                    <Link href="/login">
                         <Button
-                            variant="ghost"
                             className={cn(
-                                "w-full justify-start gap-3 px-3 py-6 hover:bg-white/[0.06] rounded-xl transition-all",
+                                "w-full justify-start gap-3 px-3 py-6 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl transition-all",
                                 collapsed && "justify-center px-0"
                             )}
                         >
-                            <Avatar className="h-9 w-9 ring-2 ring-violet-500/20">
-                                <AvatarImage src={user.user_metadata?.avatar_url} />
-                                <AvatarFallback className="bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white font-medium">
-                                    {userInitials}
-                                </AvatarFallback>
-                            </Avatar>
-                            {!collapsed && (
-                                <div className="flex flex-col items-start text-left overflow-hidden">
-                                    <span className="text-sm font-medium text-foreground truncate w-full">
-                                        {user.user_metadata?.full_name || 'User'}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground truncate w-full">
-                                        {user.email}
-                                    </span>
-                                </div>
-                            )}
+                            <LogOut className="h-5 w-5 rotate-180" />
+                            {!collapsed && <span>Sign In</span>}
                         </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56 bg-popover backdrop-blur-xl border-border">
-                        <DropdownMenuLabel className="text-muted-foreground">My Account</DropdownMenuLabel>
-                        <DropdownMenuSeparator className="bg-border" />
-                        <DropdownMenuItem
-                            onClick={() => router.push('/dashboard/settings')}
-                            className="text-foreground focus:bg-accent cursor-pointer"
-                        >
-                            <Settings className="mr-2 h-4 w-4" />
-                            Settings
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleLogout} className="text-rose-500 focus:bg-rose-500/10 focus:text-rose-500 cursor-pointer">
-                            <LogOut className="mr-2 h-4 w-4" />
-                            Logout
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                    </Link>
+                )}
             </div>
         </aside>
     )
@@ -301,11 +363,11 @@ export function MobileSidebar({ user }: SidebarProps) {
         router.refresh()
     }
 
-    const userInitials = user.user_metadata?.full_name
+    const userInitials = user?.user_metadata?.full_name
         ?.split(' ')
         .map((n: string) => n[0])
         .join('')
-        .toUpperCase() || user.email?.[0].toUpperCase() || 'U'
+        .toUpperCase() || user?.email?.[0].toUpperCase() || 'G'
 
     return (
         <Sheet open={open} onOpenChange={setOpen}>
@@ -317,62 +379,83 @@ export function MobileSidebar({ user }: SidebarProps) {
             <SheetContent side="left" className="w-72 p-0 bg-sidebar backdrop-blur-2xl border-sidebar-border">
                 {/* Header */}
                 <div className="p-4 border-b border-sidebar-border">
-                    <div className="flex items-center gap-2">
+                    <Link href="/dashboard" onClick={() => setOpen(false)} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                         <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
                             <Sparkles className="h-4 w-4 text-white" />
                         </div>
                         <h1 className="text-xl font-bold gradient-text">
                             StudentHub
                         </h1>
-                    </div>
+                    </Link>
                 </div>
 
                 {/* User Info */}
                 <div className="p-4 border-b border-sidebar-border">
                     <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10 ring-2 ring-violet-500/20">
-                            <AvatarImage src={user.user_metadata?.avatar_url} />
+                            <AvatarImage src={user?.user_metadata?.avatar_url} />
                             <AvatarFallback className="bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white font-medium">
                                 {userInitials}
                             </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 overflow-hidden">
                             <p className="text-sm font-medium text-foreground truncate">
-                                {user.user_metadata?.full_name || 'User'}
+                                {user?.user_metadata?.full_name || (user ? 'User' : 'Guest')}
                             </p>
                             <p className="text-xs text-muted-foreground truncate">
-                                {user.email}
+                                {user?.email || 'Demo Mode'}
                             </p>
                         </div>
                     </div>
                 </div>
 
                 {/* Navigation */}
-                <nav className="p-3 space-y-1 flex-1 overflow-y-auto">
-                    {navItems.map((item) => (
-                        <NavItem
-                            key={item.href}
-                            href={item.href}
-                            label={item.label}
-                            icon={item.icon}
-                            color={item.color}
-                            isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
-                            collapsed={false}
-                            onClick={() => setOpen(false)}
-                        />
+                <nav className="p-3 space-y-4 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                    {navGroups.map((group, i) => (
+                        <div key={i} className="space-y-1">
+                            {group.title && (
+                                <h4 className="px-3 text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider mb-2">
+                                    {group.title}
+                                </h4>
+                            )}
+                            {group.title && i > 0 && <div className="h-px bg-white/5 my-2 mx-2" />}
+                            {group.items.map((item) => (
+                                <NavItem
+                                    key={item.href}
+                                    href={item.href}
+                                    label={item.label}
+                                    icon={item.icon}
+                                    color={item.color}
+                                    isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
+                                    collapsed={false}
+                                    onClick={() => setOpen(false)}
+                                />
+                            ))}
+                        </div>
                     ))}
                 </nav>
 
-                {/* Logout */}
+                {/* Logout/Login */}
                 <div className="p-3 border-t border-sidebar-border">
-                    <Button
-                        variant="ghost"
-                        onClick={handleLogout}
-                        className="w-full justify-start gap-3 text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 rounded-xl"
-                    >
-                        <LogOut className="h-5 w-5" />
-                        Logout
-                    </Button>
+                    {user ? (
+                        <Button
+                            variant="ghost"
+                            onClick={handleLogout}
+                            className="w-full justify-start gap-3 text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 rounded-lg"
+                        >
+                            <LogOut className="h-5 w-5" />
+                            Logout
+                        </Button>
+                    ) : (
+                        <Link href="/login" onClick={() => setOpen(false)}>
+                            <Button
+                                className="w-full justify-start gap-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg"
+                            >
+                                <LogOut className="h-5 w-5 rotate-180" />
+                                Sign In
+                            </Button>
+                        </Link>
+                    )}
                 </div>
             </SheetContent>
         </Sheet>

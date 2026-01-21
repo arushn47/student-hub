@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useId } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, Search, FileText, Trash2, Pin, PinOff, CheckSquare, Image as ImageIcon, GripVertical } from 'lucide-react'
+import { Plus, Search, FileText, Trash2, Pin, PinOff, CheckSquare, Image as ImageIcon, GripVertical, Share2 } from 'lucide-react'
+import { ShareDialog } from '@/components/sharing/ShareDialog'
 import type { Note } from '@/types'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -109,6 +110,16 @@ function SortableNoteCard({
 
                 {/* Actions - Show on Hover */}
                 <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-gray-400 hover:text-blue-400 hover:bg-blue-500/10"
+                            onClick={() => toast.info('Sharing coming soon!')}
+                        >
+                            <Share2 className="h-4 w-4" />
+                        </Button>
+                    </div>
                     <Button
                         variant="ghost"
                         size="icon"
@@ -173,15 +184,34 @@ export function NotesList({ initialNotes }: NotesListProps) {
         })
     )
 
-    // Filter and separate pinned/unpinned
+    // Filter and separate pinned/unpinned/shared
     const filteredNotes = notes.filter(
         (note) =>
             note.title.toLowerCase().includes(search.toLowerCase()) ||
             note.plain_text?.toLowerCase().includes(search.toLowerCase())
     )
 
-    const pinnedNotes = filteredNotes.filter(n => n.is_pinned)
-    const unpinnedNotes = filteredNotes.filter(n => !n.is_pinned)
+    // Assumes we will pass current user ID to know which are shared
+    // For now, we'll infer shared if we don't own them, but we need the current user ID.
+    // Let's pass user prop or use auth hook.
+    // For now, let's assume all passed notes are "my access".
+
+    // We need to fetch current user to know which are mine vs shared
+    const [userId, setUserId] = useState<string | null>(null)
+
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data }) => {
+            setUserId(data.user?.id || null)
+        })
+    }, [])
+
+    const myNotes = filteredNotes.filter(n => n.user_id === userId)
+    const sharedNotes = filteredNotes.filter(n => userId && n.user_id !== userId)
+
+    const pinnedNotes = myNotes.filter(n => n.is_pinned)
+    const unpinnedNotes = myNotes.filter(n => !n.is_pinned)
+
+    const dndId = useId()
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event
@@ -332,6 +362,7 @@ export function NotesList({ initialNotes }: NotesListProps) {
                 </div>
             ) : (
                 <DndContext
+                    id={dndId}
                     sensors={sensors}
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
@@ -340,10 +371,13 @@ export function NotesList({ initialNotes }: NotesListProps) {
                         {/* Pinned Notes Section */}
                         {pinnedNotes.length > 0 && renderNotesGrid(pinnedNotes, 'Pinned')}
 
+                        {/* Shared Notes Section */}
+                        {sharedNotes.length > 0 && renderNotesGrid(sharedNotes, 'Shared with me')}
+
                         {/* Other Notes Section */}
-                        {unpinnedNotes.length > 0 && renderNotesGrid(
+                        {(unpinnedNotes.length > 0) && renderNotesGrid(
                             unpinnedNotes,
-                            pinnedNotes.length > 0 ? 'Others' : undefined
+                            (pinnedNotes.length > 0 || sharedNotes.length > 0) ? 'Others' : undefined
                         )}
                     </div>
                 </DndContext>
@@ -375,6 +409,14 @@ export function NotesList({ initialNotes }: NotesListProps) {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Mobile Floating Action Button */}
+            <Button
+                onClick={createNote}
+                className="md:hidden fixed bottom-24 right-6 h-14 w-14 rounded-full shadow-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white z-50 flex items-center justify-center"
+            >
+                <Plus className="h-6 w-6" />
+            </Button>
         </div>
     )
 }
