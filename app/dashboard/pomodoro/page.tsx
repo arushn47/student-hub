@@ -120,12 +120,7 @@ export default function PomodoroPage() {
     }, [isRunning, timeLeft, mode, sessionsCompleted, playSound])
 
     // Reset time when mode changes manually
-    useEffect(() => {
-        if (lastModeRef.current !== mode) {
-            setTimeLeft(TIMER_CONFIGS[mode].minutes * 60)
-            lastModeRef.current = mode
-        }
-    }, [mode])
+
 
     const toggleTimer = () => setIsRunning(!isRunning)
 

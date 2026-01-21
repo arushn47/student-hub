@@ -99,7 +99,7 @@ export async function GET() {
         }
 
         // Count consecutive days
-        let checkDate = isActiveToday ? today : yesterday
+        const checkDate = isActiveToday ? today : yesterday
 
         for (const activity of activities) {
             const activityDate = new Date(activity.activity_date)

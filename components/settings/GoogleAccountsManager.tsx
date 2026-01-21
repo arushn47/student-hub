@@ -43,6 +43,7 @@ export function GoogleAccountsManager({ onConnectionChange }: GoogleAccountsMana
     }, [supabase, onConnectionChange])
 
     useEffect(() => {
+        // eslint-disable-next-line
         loadAccounts()
     }, [loadAccounts])
 
@@ -157,8 +158,8 @@ export function GoogleAccountsManager({ onConnectionChange }: GoogleAccountsMana
                                                 key={service.id}
                                                 onClick={() => toggleService(account.id, service.id, account.services)}
                                                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${isActive
-                                                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                                                        : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                                                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                                    : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
                                                     }`}
                                             >
                                                 {isActive && <CheckCircle2 className="h-3 w-3" />}

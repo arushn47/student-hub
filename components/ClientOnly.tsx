@@ -6,6 +6,7 @@ export function ClientOnly({ children, fallback = null }: { children: React.Reac
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
+        // eslint-disable-next-line
         setMounted(true)
     }, [])
 

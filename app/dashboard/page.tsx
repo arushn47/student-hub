@@ -32,6 +32,7 @@ async function getStats(supabase: ReturnType<typeof createClient> extends Promis
         notes: (notesResult.data || []) as Note[],
         tasks: (tasksResult.data || []) as Task[],
         classes: (classesResult.data || []) as ClassSchedule[],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         subjects: (subjectsResult.data || []) as any[],
         breaks,
     }
@@ -89,6 +90,7 @@ function DashboardContent({
     notes: Note[]
     tasks: Task[]
     classes: ClassSchedule[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     subjects: any[]
     breaks: SemesterBreak[]
     userName: string
