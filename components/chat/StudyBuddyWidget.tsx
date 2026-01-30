@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MessageCircle, X, Send, Loader2, Sparkles, Minimize2, Maximize2, Mic, MicOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 
 interface Message {
     role: 'user' | 'assistant'
@@ -172,7 +173,7 @@ export function StudyBuddyWidget() {
                 onClick={() => setIsOpen(!isOpen)}
                 className={cn(
                     "fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50",
-                    "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600",
+                    "bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600",
                     "transition-transform duration-200",
                     isOpen && "scale-0"
                 )}
@@ -195,9 +196,9 @@ export function StudyBuddyWidget() {
                 )}
             >
                 {/* Header */}
-                <div className="p-3 md:p-3 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-purple-500/10 to-pink-500/10 shrink-0">
+                <div className="p-3 md:p-3 border-b border-white/10 flex items-center justify-between bg-linear-to-r from-purple-500/10 to-pink-500/10 shrink-0">
                     <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
+                        <div className="p-1.5 rounded-full bg-linear-to-r from-purple-500 to-pink-500">
                             <Sparkles className="h-3.5 w-3.5 text-white" />
                         </div>
                         <div>
@@ -240,11 +241,24 @@ export function StudyBuddyWidget() {
                                     className={cn(
                                         "max-w-[85%] rounded-2xl px-3 py-2",
                                         message.role === 'user'
-                                            ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                                            ? "bg-linear-to-r from-purple-500 to-pink-500 text-white"
                                             : "bg-white/10 text-gray-200"
                                     )}
                                 >
-                                    <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                                    <div className="text-sm wrap-break-word">
+                                        <MarkdownRenderer
+                                            content={message.content}
+                                            variant="chat"
+                                            className={cn(
+                                                // keep markdown compact inside bubbles
+                                                'prose-p:leading-relaxed prose-li:my-0',
+                                                // align colors with bubble styles
+                                                message.role === 'user'
+                                                    ? 'prose-p:text-white prose-strong:text-white prose-headings:text-white prose-a:text-white prose-code:text-white'
+                                                    : 'prose-p:text-gray-200 prose-strong:text-white prose-headings:text-white prose-a:text-purple-300'
+                                            )}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -290,7 +304,7 @@ export function StudyBuddyWidget() {
                             onClick={sendMessage}
                             disabled={!input.trim() || loading}
                             size="sm"
-                            className="h-10 w-10 shrink-0 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                            className="h-10 w-10 shrink-0 bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                         >
                             <Send className="h-4 w-4" />
                         </Button>

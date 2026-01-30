@@ -24,14 +24,22 @@ export default async function DashboardLayout({
     return (
         <AuthProvider initialUser={user}>
             <div className="h-screen w-full bg-background flex relative overflow-hidden">
+                {/* Skip to main content link for accessibility */}
+                <a
+                    href="#main-content"
+                    className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-100 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:outline-none"
+                >
+                    Skip to main content
+                </a>
+
                 {/* Decorative Background Elements - only show in dark mode */}
-                <div className="fixed inset-0 overflow-hidden pointer-events-none dark:block hidden">
+                <div className="fixed inset-0 overflow-hidden pointer-events-none dark:block hidden" aria-hidden="true">
                     {/* Top-right glow */}
                     <div className="absolute -top-40 -right-40 w-96 h-96 bg-violet-500/20 rounded-full blur-3xl" />
                     {/* Bottom-left glow */}
                     <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-fuchsia-500/20 rounded-full blur-3xl" />
                     {/* Center glow */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-500/10 rounded-full blur-3xl" />
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-150 h-150 bg-purple-500/10 rounded-full blur-3xl" />
                     {/* Grid pattern overlay */}
                     <div
                         className="absolute inset-0 opacity-[0.02]"
@@ -43,15 +51,15 @@ export default async function DashboardLayout({
 
                 {/* Guest Mode Banner */}
                 {!user && (
-                    <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-500/90 to-pink-500/90 backdrop-blur-sm py-2 px-4">
+                    <div className="fixed top-0 left-0 right-0 z-50 bg-linear-to-r from-purple-500/90 to-pink-500/90 backdrop-blur-sm py-2 px-4" role="banner">
                         <div className="max-w-7xl mx-auto flex items-center justify-center gap-3 text-white text-sm">
-                            <Sparkles className="h-4 w-4" />
-                            <span>You&apos;re in demo mode. Sign in to save your work!</span>
+                            <Sparkles className="h-4 w-4" aria-hidden="true" />
+                            <span>You&apos;re in preview mode. Sign in to save your work!</span>
                             <Link
                                 href="/login"
                                 className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
                             >
-                                <LogIn className="h-3.5 w-3.5" />
+                                <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
                                 Sign In
                             </Link>
                         </div>
@@ -59,9 +67,9 @@ export default async function DashboardLayout({
                 )}
 
                 {/* Desktop Sidebar */}
-                <div className="hidden md:block relative z-20 h-full">
+                <nav className="hidden md:block relative z-20 h-full" aria-label="Main navigation">
                     <Sidebar user={serializedUser} />
-                </div>
+                </nav>
 
                 {/* Main Content */}
                 <div className={`flex-1 flex flex-col h-full relative z-10 overflow-hidden ${!user ? 'pt-10' : ''}`}>
@@ -71,11 +79,11 @@ export default async function DashboardLayout({
                         <Link href="/dashboard" className="text-lg font-bold text-foreground hover:opacity-80 transition-opacity">
                             StudentHub
                         </Link>
-                        <div className="w-8" />
+                        <div className="w-8" aria-hidden="true" />
                     </header>
 
                     {/* Page Content */}
-                    <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto scrollbar-thin">
+                    <main id="main-content" className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto scrollbar-thin" tabIndex={-1}>
                         <div className="max-w-7xl mx-auto pb-20">
                             {children}
                         </div>

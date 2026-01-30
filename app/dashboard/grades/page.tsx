@@ -49,6 +49,12 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog'
 
 interface Course {
     id: string
@@ -87,10 +93,14 @@ export default function GradesPage() {
     const [showAddForm, setShowAddForm] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [targetCGPA, setTargetCGPA] = useState<number>(9.0)
-    const [programCredits, setProgramCredits] = useState<number>(239) // User can adjust
+    const [programCredits, setProgramCredits] = useState<number>(169) // Total program credits
 
     // State for collapsible semesters
     const [openSemesters, setOpenSemesters] = useState<Record<string, boolean>>({})
+
+    // State for editing a course
+    const [editingCourse, setEditingCourse] = useState<Course | null>(null)
+    const [editForm, setEditForm] = useState({ name: '', credits: 3, grade: 'S', semester: 'Semester 1' })
 
     const supabase = createClient()
 
@@ -156,7 +166,10 @@ export default function GradesPage() {
     // Ideally sort by time/number? String sort for now. "Semester 1", "Semester 2"... works ok.
 
     const cgpa = calculateGPA(courses)
-    const totalCredits = courses.reduce((sum, course) => sum + course.credits, 0)
+    // Exclude P grade courses from total credits (pass/fail don't count)
+    const totalCredits = courses.reduce((sum, course) =>
+        course.grade === 'P' ? sum : sum + course.credits, 0
+    )
 
     const addCourse = async () => {
         if (!newCourse.name) return
@@ -221,6 +234,57 @@ export default function GradesPage() {
             toast.success('Semester updated')
         } catch {
             toast.error('Failed to update semester')
+        }
+    }
+
+    const openEditDialog = (course: Course) => {
+        setEditingCourse(course)
+        setEditForm({
+            name: course.name,
+            credits: course.credits,
+            grade: course.grade,
+            semester: course.semester
+        })
+    }
+
+    const updateCourse = async () => {
+        if (!editingCourse || !editForm.name) return
+
+        try {
+            setIsSubmitting(true)
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) {
+                toast.error('You must be logged in')
+                return
+            }
+
+            const { error } = await supabase
+                .from('courses')
+                .update({
+                    name: editForm.name,
+                    credits: editForm.credits,
+                    grade: editForm.grade,
+                    semester: editForm.semester
+                })
+                .eq('id', editingCourse.id)
+                .eq('user_id', user.id)
+
+            if (error) {
+                console.error('Supabase update error:', error)
+                throw error
+            }
+
+            setCourses(courses.map(c =>
+                c.id === editingCourse.id
+                    ? { ...c, ...editForm }
+                    : c
+            ))
+            setEditingCourse(null)
+            toast.success('Course updated')
+        } catch {
+            toast.error('Failed to update course')
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -611,92 +675,7 @@ export default function GradesPage() {
                 </Card>
             )}
 
-            {/* Add Course Form */}
-            {showAddForm && (
-                <Card className="glass-card border-violet-500/30 bg-violet-500/5">
-                    <CardHeader>
-                        <CardTitle className="text-lg text-white">Add New Course</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="md:col-span-2">
-                                <Label className="text-gray-400">Course Name</Label>
-                                <Input
-                                    placeholder="e.g., Data Structures"
-                                    value={newCourse.name}
-                                    onChange={(e) => setNewCourse({ ...newCourse, name: e.target.value })}
-                                    className="bg-white/5 border-white/10 text-white mt-1"
-                                />
-                            </div>
-                            <div>
-                                <Label className="text-gray-400">Semester</Label>
-                                <Select
-                                    value={newCourse.semester}
-                                    onValueChange={(value) => setNewCourse({ ...newCourse, semester: value })}
-                                >
-                                    <SelectTrigger className="w-full bg-white/5 border-white/10 text-white mt-1">
-                                        <SelectValue placeholder="Select semester" />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-gray-900 border-white/10">
-                                        {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                                            <SelectItem key={n} value={`Semester ${n}`} className="text-white hover:bg-white/10">
-                                                Semester {n}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div>
-                                <Label className="text-gray-400">Credits</Label>
-                                <Select
-                                    value={newCourse.credits.toString()}
-                                    onValueChange={(value) => setNewCourse({ ...newCourse, credits: parseInt(value) })}
-                                >
-                                    <SelectTrigger className="w-full bg-white/5 border-white/10 text-white mt-1">
-                                        <SelectValue placeholder="Credits" />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-gray-900 border-white/10">
-                                        {[1, 2, 3, 4, 5, 6].map((n) => (
-                                            <SelectItem key={n} value={n.toString()} className="text-white hover:bg-white/10">
-                                                {n}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-                            <div>
-                                <Label className="text-gray-400">Grade</Label>
-                                <Select
-                                    value={newCourse.grade}
-                                    onValueChange={(value) => setNewCourse({ ...newCourse, grade: value })}
-                                >
-                                    <SelectTrigger className="w-full bg-white/5 border-white/10 text-white mt-1">
-                                        <SelectValue placeholder="Grade" />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-gray-900 border-white/10">
-                                        {Object.keys(gradePoints).map((g) => (
-                                            <SelectItem key={g} value={g} className="text-white hover:bg-white/10">
-                                                {g}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="md:col-span-3 flex items-end justify-end gap-2">
-                                <Button variant="ghost" onClick={() => setShowAddForm(false)} className="text-gray-400">
-                                    Done
-                                </Button>
-                                <Button onClick={addCourse} className="gradient-primary text-white space-x-2" disabled={isSubmitting}>
-                                    <Plus className="h-4 w-4" />
-                                    <span>Add</span>
-                                </Button>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
+            {/* Add Course Dialog is at the bottom */}
 
             {/* Semester Lists (SGPA) */}
             <div className="space-y-6">
@@ -788,24 +767,15 @@ export default function GradesPage() {
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-1">
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                                                                <Pencil className="h-4 w-4" />
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent className="bg-popover border-border">
-                                                            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                                                                <DropdownMenuItem
-                                                                    key={n}
-                                                                    onClick={() => updateCourseSemester(course.id, `Semester ${n}`)}
-                                                                >
-                                                                    Move to Semester {n}
-                                                                </DropdownMenuItem>
-                                                            ))}
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => removeCourse(course.id)}>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 text-muted-foreground hover:text-blue-400 hover:bg-blue-500/10"
+                                                        onClick={() => openEditDialog(course)}
+                                                    >
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-400 hover:bg-red-500/10" onClick={() => removeCourse(course.id)}>
                                                         <Trash2 className="h-4 w-4" />
                                                     </Button>
                                                 </div>
@@ -819,31 +789,14 @@ export default function GradesPage() {
                                                     {course.grade}
                                                 </div>
                                                 <div className="col-span-2 text-right flex items-center justify-end gap-1">
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-7 w-7 text-muted-foreground hover:text-blue-400 hover:bg-blue-500/10 transition-all"
-                                                            >
-                                                                <Pencil className="h-3.5 w-3.5" />
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent className="bg-popover border-border">
-                                                            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                                                                <DropdownMenuItem
-                                                                    key={n}
-                                                                    onClick={() => updateCourseSemester(course.id, `Semester ${n}`)}
-                                                                    className={cn(
-                                                                        "cursor-pointer",
-                                                                        course.semester === `Semester ${n}` && "bg-violet-500/20 text-violet-400"
-                                                                    )}
-                                                                >
-                                                                    Semester {n}
-                                                                </DropdownMenuItem>
-                                                            ))}
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 text-muted-foreground hover:text-blue-400 hover:bg-blue-500/10 transition-all"
+                                                        onClick={() => openEditDialog(course)}
+                                                    >
+                                                        <Pencil className="h-3.5 w-3.5" />
+                                                    </Button>
                                                     <AlertDialog>
                                                         <AlertDialogTrigger asChild>
                                                             <Button
@@ -915,6 +868,179 @@ export default function GradesPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Add Course Dialog */}
+            <Dialog open={showAddForm} onOpenChange={setShowAddForm}>
+                <DialogContent className="bg-card border-border sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="text-foreground">Add New Course</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div>
+                            <Label className="text-muted-foreground">Course Name</Label>
+                            <Input
+                                placeholder="e.g., Data Structures"
+                                value={newCourse.name}
+                                onChange={(e) => setNewCourse({ ...newCourse, name: e.target.value })}
+                                className="bg-muted/50 border-border text-foreground mt-1"
+                            />
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div>
+                                <Label className="text-muted-foreground">Credits</Label>
+                                <Select
+                                    value={newCourse.credits.toString()}
+                                    onValueChange={(value) => setNewCourse({ ...newCourse, credits: parseInt(value) })}
+                                >
+                                    <SelectTrigger className="w-full bg-muted/50 border-border text-foreground mt-1">
+                                        <SelectValue placeholder="Credits" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-popover border-border">
+                                        {[0, 1, 2, 3, 4].map((n) => (
+                                            <SelectItem key={n} value={n.toString()}>
+                                                {`${n}`}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label className="text-muted-foreground">Grade</Label>
+                                <Select
+                                    value={newCourse.grade}
+                                    onValueChange={(value) => setNewCourse({ ...newCourse, grade: value })}
+                                >
+                                    <SelectTrigger className="w-full bg-muted/50 border-border text-foreground mt-1">
+                                        <SelectValue placeholder="Grade" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-popover border-border">
+                                        {Object.keys(gradePoints).map((g) => (
+                                            <SelectItem key={g} value={g}>
+                                                {g}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label className="text-muted-foreground">Semester</Label>
+                                <Select
+                                    value={newCourse.semester}
+                                    onValueChange={(value) => setNewCourse({ ...newCourse, semester: value })}
+                                >
+                                    <SelectTrigger className="w-full bg-muted/50 border-border text-foreground mt-1">
+                                        <SelectValue placeholder="Semester" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-popover border-border">
+                                        {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                                            <SelectItem key={n} value={`Semester ${n}`}>
+                                                Sem {n}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button variant="ghost" onClick={() => setShowAddForm(false)} className="text-muted-foreground">
+                            Cancel
+                        </Button>
+                        <Button onClick={addCourse} className="gradient-primary text-white" disabled={isSubmitting}>
+                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+                                <>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Add Course
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Course Dialog */}
+            <Dialog open={!!editingCourse} onOpenChange={(open) => !open && setEditingCourse(null)}>
+                <DialogContent className="bg-card border-border sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="text-foreground">Edit Course</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div>
+                            <Label className="text-muted-foreground">Course Name</Label>
+                            <Input
+                                placeholder="e.g., Data Structures"
+                                value={editForm.name}
+                                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                className="bg-muted/50 border-border text-foreground mt-1"
+                            />
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div>
+                                <Label className="text-muted-foreground">Credits</Label>
+                                <Select
+                                    value={editForm.credits.toString()}
+                                    onValueChange={(value) => setEditForm({ ...editForm, credits: parseInt(value) })}
+                                >
+                                    <SelectTrigger className="w-full bg-muted/50 border-border text-foreground mt-1">
+                                        <SelectValue placeholder="Credits" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-popover border-border">
+                                        {[0, 1, 2, 3, 4].map((n) => (
+                                            <SelectItem key={n} value={n.toString()}>
+                                                {`${n}`}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label className="text-muted-foreground">Grade</Label>
+                                <Select
+                                    value={editForm.grade}
+                                    onValueChange={(value) => setEditForm({ ...editForm, grade: value })}
+                                >
+                                    <SelectTrigger className="w-full bg-muted/50 border-border text-foreground mt-1">
+                                        <SelectValue placeholder="Grade" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-popover border-border">
+                                        {Object.keys(gradePoints).map((g) => (
+                                            <SelectItem key={g} value={g}>
+                                                {g}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label className="text-muted-foreground">Semester</Label>
+                                <Select
+                                    value={editForm.semester}
+                                    onValueChange={(value) => setEditForm({ ...editForm, semester: value })}
+                                >
+                                    <SelectTrigger className="w-full bg-muted/50 border-border text-foreground mt-1">
+                                        <SelectValue placeholder="Semester" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-popover border-border">
+                                        {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                                            <SelectItem key={n} value={`Semester ${n}`}>
+                                                Sem {n}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button variant="ghost" onClick={() => setEditingCourse(null)} className="text-muted-foreground">
+                            Cancel
+                        </Button>
+                        <Button onClick={updateCourse} className="gradient-primary text-white" disabled={isSubmitting}>
+                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Changes'}
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

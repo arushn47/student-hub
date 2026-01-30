@@ -95,7 +95,7 @@ export function ImageUploadExtractor({
                 {trigger || (
                     <Button variant="outline" className="gap-2">
                         <Sparkles className="h-4 w-4 text-violet-400" />
-                        Extract from Image
+                        Extract from Image/PDF
                     </Button>
                 )}
             </DialogTrigger>

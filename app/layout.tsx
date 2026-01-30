@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import "nprogress/nprogress.css";
+import "katex/dist/katex.min.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Suspense } from "react";
@@ -13,9 +14,45 @@ const inter = Inter({
   subsets: ["latin"],
 });
 
+function getMetadataBaseUrl(): string {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL;
+  if (explicit) {
+    return explicit.startsWith("http://") || explicit.startsWith("https://")
+      ? explicit
+      : `https://${explicit}`;
+  }
+
+  // Vercel provides the hostname without protocol.
+  const vercel = process.env.VERCEL_URL;
+  if (vercel) {
+    return `https://${vercel}`;
+  }
+
+  return "http://localhost:3000";
+}
+
 export const metadata: Metadata = {
-  title: "StudentHub",
-  description: "Your AI-powered productivity companion for academic success",
+  metadataBase: new URL(getMetadataBaseUrl()),
+  title: {
+    default: "StudentHub - AI-Powered Study Companion",
+    template: "%s | StudentHub",
+  },
+  description: "Your ultimate AI-powered study companion. Notes, tasks, exam prep, CGPA calculator, and focus tools — everything you need to ace your studies in one beautiful app.",
+  keywords: [
+    "student productivity",
+    "study app",
+    "notes app",
+    "task management",
+    "exam preparation",
+    "CGPA calculator",
+    "pomodoro timer",
+    "AI study assistant",
+    "flashcards",
+    "student planner",
+  ],
+  authors: [{ name: "Arush Nandakumar Menon" }],
+  creator: "Arush Nandakumar Menon",
+  publisher: "StudentHub",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -25,6 +62,38 @@ export const metadata: Metadata = {
   icons: {
     icon: "/icons/icon-192.png",
     apple: "/icons/icon-192.png",
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    siteName: "StudentHub",
+    title: "StudentHub - AI-Powered Study Companion",
+    description: "Your ultimate AI-powered study companion. Notes, tasks, exam prep, and focus tools — everything you need to ace your studies.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "StudentHub - AI-Powered Study Companion",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "StudentHub - AI-Powered Study Companion",
+    description: "Your ultimate AI-powered study companion. Notes, tasks, exam prep, and focus tools — everything you need to ace your studies.",
+    images: ["/og-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
   },
 };
 

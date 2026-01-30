@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTasksClient } from '@/lib/google'
 import { getGoogleTokensForService } from '@/lib/google-accounts'
+import { createTaskSchema, updateTaskSchema } from '@/lib/schemas'
+import { unauthorizedResponse } from '@/lib/api-utils'
+import { validationErrorResponse, createApiErrorResponse } from '@/lib/errors'
 
 // GET: Fetch tasks from Google Tasks (all lists)
 export async function GET() {
@@ -75,12 +78,9 @@ export async function POST(req: NextRequest) {
         const supabase = await createClient()
         const { data: { user } } = await supabase.auth.getUser()
 
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
+        if (!user) return unauthorizedResponse()
 
         const { tokens } = await getGoogleTokensForService(user.id, 'tasks')
-
         if (!tokens) {
             return NextResponse.json({ error: 'No Google account connected for Tasks' }, { status: 400 })
         }
@@ -88,17 +88,22 @@ export async function POST(req: NextRequest) {
         const tasksClient = getTasksClient(tokens)
 
         const body = await req.json()
-        const { title, notes, due, taskListId } = body
 
-        if (!title) {
-            return NextResponse.json({ error: 'Title is required' }, { status: 400 })
+        // Zod Validation
+        const validation = createTaskSchema.safeParse(body)
+        if (!validation.success) {
+            return validationErrorResponse("Invalid task data",
+                Object.fromEntries(validation.error.issues.map(e => [e.path[0], e.message])) as Record<string, string>
+            )
         }
 
+        const { title, notes, due, taskListId } = validation.data
+
         // Get default task list if not provided
-        let listId = taskListId
+        let listId = taskListId || undefined
         if (!listId) {
             const taskListsResponse = await tasksClient.tasklists.list({ maxResults: 1 })
-            listId = taskListsResponse.data.items?.[0]?.id
+            listId = taskListsResponse.data.items?.[0]?.id || undefined
         }
 
         if (!listId) {
@@ -109,8 +114,8 @@ export async function POST(req: NextRequest) {
             tasklist: listId,
             requestBody: {
                 title,
-                notes,
-                due: due ? new Date(due).toISOString() : undefined,
+                notes: notes || undefined,
+                due: due || undefined,
             },
         })
 
@@ -122,9 +127,7 @@ export async function POST(req: NextRequest) {
         })
 
     } catch (error: unknown) {
-        console.error('Task create error:', error)
-        const errorMessage = error instanceof Error ? error.message : 'Failed to create task';
-        return NextResponse.json({ error: errorMessage }, { status: 500 })
+        return createApiErrorResponse(error, 'Failed to create task')
     }
 }
 
@@ -134,12 +137,9 @@ export async function PATCH(req: NextRequest) {
         const supabase = await createClient()
         const { data: { user } } = await supabase.auth.getUser()
 
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
+        if (!user) return unauthorizedResponse()
 
         const { tokens } = await getGoogleTokensForService(user.id, 'tasks')
-
         if (!tokens) {
             return NextResponse.json({ error: 'No Google account connected for Tasks' }, { status: 400 })
         }
@@ -147,11 +147,16 @@ export async function PATCH(req: NextRequest) {
         const tasksClient = getTasksClient(tokens)
 
         const body = await req.json()
-        const { taskId, taskListId, completed } = body
 
-        if (!taskId || !taskListId) {
-            return NextResponse.json({ error: 'taskId and taskListId are required' }, { status: 400 })
+        // Zod Validation
+        const validation = updateTaskSchema.safeParse(body)
+        if (!validation.success) {
+            return validationErrorResponse("Invalid update data",
+                Object.fromEntries(validation.error.issues.map(e => [e.path[0], e.message])) as Record<string, string>
+            )
         }
+
+        const { taskId, taskListId, completed } = validation.data
 
         const response = await tasksClient.tasks.patch({
             tasklist: taskListId,
@@ -169,8 +174,6 @@ export async function PATCH(req: NextRequest) {
         })
 
     } catch (error: unknown) {
-        console.error('Task update error:', error)
-        const errorMessage = error instanceof Error ? error.message : 'Failed to update task';
-        return NextResponse.json({ error: errorMessage }, { status: 500 })
+        return createApiErrorResponse(error, 'Failed to update task')
     }
 }

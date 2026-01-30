@@ -3,8 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, useCallback } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -406,6 +405,12 @@ export default function SubjectDetailPage() {
     const handleFileUpload = async (moduleId: string, files: File[]) => {
         if (files.length === 0) return
 
+        const MAX_FILES_PER_MODULE = 5
+        if (files.length > MAX_FILES_PER_MODULE) {
+            toast.error(`Too many files selected. Please upload ${MAX_FILES_PER_MODULE} files or fewer (combine PDFs if needed).`)
+            return
+        }
+
         setUploading(moduleId)
         try {
             const { data: { user } } = await supabase.auth.getUser()
@@ -414,8 +419,8 @@ export default function SubjectDetailPage() {
             const uploadedPaths: string[] = []
             const fileNames: string[] = []
 
-            // Upload all files
-            for (const file of files) {
+            // Upload all files in parallel
+            await Promise.all(files.map(async (file) => {
                 const filePath = `${user.id}/${moduleId}/${file.name}`
                 const { error: uploadError } = await supabase.storage
                     .from('exam-pdfs')
@@ -433,7 +438,7 @@ export default function SubjectDetailPage() {
                     file_path: filePath,
                     file_size: file.size
                 })
-            }
+            }))
 
             // Update module record with first file (for backward compatibility)
             const { error: updateError } = await supabase
@@ -461,14 +466,15 @@ export default function SubjectDetailPage() {
         }
     }
 
-    const handleReprocess = async (moduleId: string) => {
-        // Find module files
-        const files = moduleFiles.filter(f => f.module_id === moduleId)
-        // Allow reprocessing even without files (Topic Generation)
+    const handleReprocess = async (moduleId: string, opts?: { topicOnly?: boolean }) => {
+        const topicOnly = Boolean(opts?.topicOnly)
 
-        const filePaths = files.map(f => f.file_path)
+        // Find module files (used for normal reprocess)
+        const files = moduleFiles.filter(f => f.module_id === moduleId)
+        const filePaths = topicOnly ? [] : files.map(f => f.file_path)
+
         setProcessing(moduleId)
-        await processModule(moduleId, filePaths)
+        await processModule(moduleId, filePaths, { topicOnly })
         setProcessing(null)
     }
 
@@ -499,13 +505,19 @@ export default function SubjectDetailPage() {
         }
     }
 
-    const processModule = async (moduleId: string, filePaths: string[]) => {
+    const processModule = async (moduleId: string, filePaths: string[], opts?: { topicOnly?: boolean }) => {
         let shouldMarkError = true
+        const controller = new AbortController()
+        const timeoutMs = 120_000
+        const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+        const processingToastId = toast.loading('Processing with AI… this may take about a minute.')
+
         try {
             const response = await fetch('/api/exam-prep/process', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ moduleId, filePaths })
+                body: JSON.stringify({ moduleId, filePaths, topicOnly: Boolean(opts?.topicOnly) }),
+                signal: controller.signal,
             })
 
             if (!response.ok) {
@@ -520,6 +532,12 @@ export default function SubjectDetailPage() {
                         message = retry
                             ? `Rate limited. Try again in ~${retry}s.`
                             : 'Rate limited. Try again in a moment.'
+
+                        // Don't leave the module stuck in "processing".
+                        await supabase
+                            .from('exam_modules')
+                            .update({ status: 'pending' })
+                            .eq('id', moduleId)
                     } else {
                         message = error?.message || error?.error || message
                     }
@@ -534,11 +552,26 @@ export default function SubjectDetailPage() {
                 throw new Error(message)
             }
 
-            toast.success('Module processed! Questions and flashcards generated.')
+            toast.success('Module processed! Questions and flashcards generated.', { id: processingToastId })
             fetchData()
         } catch (error) {
             console.error('Processing error:', error)
-            toast.error(error instanceof Error ? error.message : 'Failed to process module')
+
+            const isAbort = error instanceof DOMException && error.name === 'AbortError'
+            if (isAbort) {
+                toast.error(
+                    `Processing timed out after ${Math.round(timeoutMs / 1000)}s. Try reprocessing (or upload fewer files).`,
+                    { id: processingToastId }
+                )
+                // Make it retryable, not stuck in processing
+                await supabase
+                    .from('exam_modules')
+                    .update({ status: 'pending' })
+                    .eq('id', moduleId)
+                shouldMarkError = false
+            } else {
+                toast.error(error instanceof Error ? error.message : 'Failed to process module', { id: processingToastId })
+            }
 
             // Update status to error
             if (shouldMarkError) {
@@ -548,6 +581,7 @@ export default function SubjectDetailPage() {
                     .eq('id', moduleId)
             }
         } finally {
+            window.clearTimeout(timeoutId)
             setProcessing(null)
         }
     }
@@ -631,7 +665,7 @@ export default function SubjectDetailPage() {
                                 value={subjectQuestions}
                                 onChange={(e) => setSubjectQuestions(e.target.value)}
                                 placeholder="E.g., 'For Midterms, focus on Unit 1 & 2 definitions. For Endterms, Unit 5 applications are key. Important questions: Explain MVC architecture...'"
-                                className="min-h-[100px] bg-black/20 border-amber-500/20 focus:border-amber-500/50"
+                                className="min-h-25 bg-black/20 border-amber-500/20 focus:border-amber-500/50"
                             />
                             <div className="flex justify-end">
                                 <Button
@@ -708,7 +742,7 @@ export default function SubjectDetailPage() {
                             uploading={uploading === module.id}
                             processing={processing === module.id}
                             onUpload={(file) => handleFileUpload(module.id, file)}
-                            onReprocess={() => handleReprocess(module.id)}
+                            onReprocess={(opts) => handleReprocess(module.id, opts)}
                             onDeleteFile={handleDeleteFile}
                         />
                     ))}
@@ -841,11 +875,10 @@ export default function SubjectDetailPage() {
                                     </CardHeader>
                                     <CollapsibleContent>
                                         <CardContent>
-                                            <div className="prose prose-invert max-w-none prose-pre:bg-muted/50 prose-pre:text-muted-foreground">
-                                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                                    {module.summary}
-                                                </ReactMarkdown>
-                                            </div>
+                                            <MarkdownRenderer
+                                                content={module.summary || ''}
+                                                className="prose-pre:bg-muted/50 prose-pre:text-muted-foreground"
+                                            />
                                         </CardContent>
                                     </CollapsibleContent>
                                 </Card>
@@ -872,7 +905,7 @@ function ModuleCard({
     uploading: boolean
     processing: boolean
     onUpload: (files: File[]) => void
-    onReprocess: () => void
+    onReprocess: (opts?: { topicOnly?: boolean }) => void
     onDeleteFile: (fileId: string, filePath: string) => void
 }) {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -978,7 +1011,7 @@ function ModuleCard({
                         <Button
                             size="sm"
                             variant="outline"
-                            onClick={onReprocess}
+                            onClick={() => onReprocess()}
                             disabled={processing}
                             className="gap-2 border-white/10 hover:bg-white/5 h-8 px-2 sm:px-3"
                         >
@@ -992,7 +1025,7 @@ function ModuleCard({
                         <Button
                             size="sm"
                             variant="default"
-                            onClick={onReprocess}
+                            onClick={() => onReprocess({ topicOnly: true })}
                             disabled={processing}
                             className="gap-2 h-8 px-3 bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-500/50 shadow-lg shadow-indigo-500/20"
                         >
@@ -1090,14 +1123,15 @@ function QuestionCard({ question }: { question: Question }) {
                     </div>
                 )}
                 <div className="flex-1 space-y-3 min-w-0 w-full">
-                    <p className="font-medium break-words">{question.question}</p>
+                    <p className="font-medium wrap-break-word">{question.question}</p>
 
                     {showAnswer ? (
                         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
-                            <div className="text-sm text-muted-foreground prose prose-invert max-w-none prose-p:my-1 prose-pre:bg-black/50 overflow-hidden">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                    {question.answer}
-                                </ReactMarkdown>
+                            <div className="text-sm overflow-hidden">
+                                <MarkdownRenderer
+                                    content={question.answer}
+                                    className="prose-p:my-1 prose-pre:bg-black/50"
+                                />
                             </div>
 
                             {/* Visual Diagram Button */}

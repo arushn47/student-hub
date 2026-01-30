@@ -24,8 +24,12 @@ interface GeneratedContent {
 
 export async function POST(request: Request) {
     let stage = 'init'
+    let moduleId: string | null = null
+    let userId: string | null = null
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null
+
     try {
-        const supabase = await createClient()
+        supabase = await createClient()
         stage = 'auth.getUser'
         const { data: { user } } = await supabase.auth.getUser()
 
@@ -33,9 +37,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
+        userId = user.id
+
         stage = 'request.json'
         const body = await request.json().catch(() => ({}))
-        const moduleId = body?.moduleId
+        moduleId = body?.moduleId
+
+        const topicOnly = typeof body?.topicOnly === 'boolean' ? body.topicOnly : false
 
 
         if (!moduleId) {
@@ -60,7 +68,10 @@ export async function POST(request: Request) {
             ? filePathsFromClient.filter((p): p is string => typeof p === 'string' && p.length > 0)
             : []
 
-        if (filePaths.length === 0) {
+        // Topic-only regeneration explicitly ignores any module files (even if stored).
+        if (topicOnly) {
+            filePaths = []
+        } else if (filePaths.length === 0) {
             // Fetch ALL files for this module to ensure comprehensive context
             stage = 'db.exam_module_files'
             const { data: moduleFiles, error: filesError } = await supabase
@@ -70,7 +81,33 @@ export async function POST(request: Request) {
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: true })
 
+            if (filesError) {
+                throw filesError
+            }
+
             filePaths = moduleFiles ? moduleFiles.map(f => f.file_path) : []
+        }
+
+        // Guardrail: too many files will usually blow up context limits / timeouts.
+        const MAX_FILES_PER_PROCESS = 6
+        if (filePaths.length > MAX_FILES_PER_PROCESS) {
+            // Avoid leaving the module stuck in "processing".
+            try {
+                await supabase
+                    .from('exam_modules')
+                    .update({ status: 'error' })
+                    .eq('id', moduleId)
+                    .eq('user_id', user.id)
+            } catch {
+                // ignore
+            }
+
+            return NextResponse.json(
+                {
+                    error: `Too many files selected (${filePaths.length}). Please select ${MAX_FILES_PER_PROCESS} or fewer (combine PDFs if needed).`,
+                },
+                { status: 413 }
+            )
         }
 
         // Construct the parts
@@ -129,6 +166,7 @@ export async function POST(request: Request) {
                 - Focus ONLY on high-yield comparisons, formulas, or "tricks" to remember concepts.
                 - NO long paragraphs.
             - Keep answers clear, structured, and exam-ready.${subjectImportantQuestions ? '\n- PRIORITIZE the important topics/questions provided above when creating questions and flashcards.' : ''}
+            ${topicOnly ? '\n- TOPIC-ONLY MODE: Use ONLY content relevant to this module topic. If the syllabus includes other modules/units, IGNORE them completely.' : ''}
             - If provided with PDF images, pay special attention to any **HIGHLIGHTED TEXT** (yellow/colored backgrounds) or red-circled items, as these are strict syllabus priority areas.
             - If a question would benefit from a visual diagram (e.g. "Draw the architecture of X", "Explain the cycle of Y"), provide a specific Google Image search query in 'visual_search_query' (e.g. "labeled diagram of von neumann architecture"). Otherwise leave it null.
             - Return pure JSON.`
@@ -175,10 +213,10 @@ export async function POST(request: Request) {
 
         // Download and add files as parts
         if (filePaths.length === 0) {
-            console.log('No files provided. Generating from topic solely.')
+            console.log(topicOnly ? 'Topic-only mode. Skipping module files; using syllabus + internal knowledge.' : 'No files provided. Generating from topic solely.')
             parts.push(`
                 WARNING: NO STUDY FILES WERE UPLOADED FOR THIS MODULE.
-                YOU MUST GENERATE CONTENT SOLELY BASED ON YOUR INTERNAL KNOWLEDGE.
+                ${topicOnly ? 'YOU MUST GENERATE CONTENT USING THE SYLLABUS (if attached) AND YOUR INTERNAL KNOWLEDGE.' : 'YOU MUST GENERATE CONTENT SOLELY BASED ON YOUR INTERNAL KNOWLEDGE.'}
                 
                 Context:
                 - Subject: ${subjectName}
@@ -190,6 +228,7 @@ export async function POST(request: Request) {
                 - Create questions, flashcards, and a summary that effectively cover the standard curriculum for the topic **"${module.name}"**.
                 - Ensure the questions range from fundamental concepts to advanced applications typical for this topic.
                 - Use the "Important Questions" context provided above if relevant.
+                ${topicOnly ? '- If the syllabus covers multiple modules, ONLY use the section relevant to this module topic.' : ''}
                 `)
             addedAnyFileContent = true
         } else {
@@ -276,24 +315,44 @@ export async function POST(request: Request) {
 
         // DELETE existing questions and flashcards for this module to prevent duplicates
         stage = 'db.delete_old_content'
-        await supabase.from('exam_questions').delete().eq('module_id', moduleId)
-        await supabase.from('exam_flashcards').delete().eq('module_id', moduleId)
+        {
+            const { error: deleteQuestionsError } = await supabase.from('exam_questions').delete().eq('module_id', moduleId)
+            if (deleteQuestionsError) throw deleteQuestionsError
+            const { error: deleteFlashcardsError } = await supabase.from('exam_flashcards').delete().eq('module_id', moduleId)
+            if (deleteFlashcardsError) throw deleteFlashcardsError
+        }
 
         // Save new content
         stage = 'db.insert_new_content'
         await saveGeneratedContent(supabase, moduleId, user.id, result)
 
         stage = 'db.update_module'
-        await supabase
+        {
+            const { error: updateModuleError } = await supabase
             .from('exam_modules')
             .update({ status: 'ready', summary: result.summary })
             .eq('id', moduleId)
+            if (updateModuleError) throw updateModuleError
+        }
 
         return NextResponse.json({ success: true })
 
 
     } catch (error) {
         if (error instanceof GeminiRateLimitError) {
+            // Don't leave module stuck in processing on rate-limit.
+            if (supabase && moduleId && userId) {
+                try {
+                    await supabase
+                        .from('exam_modules')
+                        .update({ status: 'pending' })
+                        .eq('id', moduleId)
+                        .eq('user_id', userId)
+                } catch {
+                    // ignore
+                }
+            }
+
             return NextResponse.json(
                 {
                     error: 'Rate limited by Gemini API',
@@ -306,6 +365,19 @@ export async function POST(request: Request) {
         }
 
         console.error('Process API Error:', { stage, error })
+
+        // Ensure module is not left stuck in processing after failures.
+        if (supabase && moduleId && userId) {
+            try {
+                await supabase
+                    .from('exam_modules')
+                    .update({ status: 'error' })
+                    .eq('id', moduleId)
+                    .eq('user_id', userId)
+            } catch {
+                // ignore
+            }
+        }
 
         const isProd = process.env.NODE_ENV === 'production'
         const message = error instanceof Error ? error.message : 'Unknown error'
@@ -448,12 +520,55 @@ function normalizeGeneratedContent(
         }
     }
 
-    const cleanFlashcards = flashcards
-        .map(f => ({
-            front: typeof f?.front === 'string' ? f.front.trim() : '',
-            back: typeof f?.back === 'string' ? f.back.trim() : '',
-        }))
+    const cleanFlashcardsRaw = flashcards
+        .map((f: unknown) => {
+            const getStr = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+
+            // Support a few common alternative shapes from the model.
+            if (typeof f === 'string') {
+                const s = f.trim()
+                const splitByColon = s.split(/\s*:\s*/)
+                if (splitByColon.length >= 2) {
+                    const front = splitByColon[0] || ''
+                    const back = splitByColon.slice(1).join(':') || ''
+                    return { front: front.trim(), back: back.trim() }
+                }
+
+                const splitByDash = s.split(/\s*-\s*/)
+                if (splitByDash.length >= 2) {
+                    const front = splitByDash[0] || ''
+                    const back = splitByDash.slice(1).join('-') || ''
+                    return { front: front.trim(), back: back.trim() }
+                }
+
+                return { front: '', back: '' }
+            }
+
+            const obj = f as Record<string, unknown>
+            const front =
+                getStr(obj.front) ||
+                getStr(obj.term) ||
+                getStr(obj.title) ||
+                getStr(obj.question) ||
+                getStr(obj.q)
+
+            const back =
+                getStr(obj.back) ||
+                getStr(obj.definition) ||
+                getStr(obj.description) ||
+                getStr(obj.answer) ||
+                getStr(obj.a)
+
+            return { front, back }
+        })
         .filter(f => f.front.length > 0 && f.back.length > 0)
+
+    const fallbackFromQuestions = cleanQuestions
+        .slice(0, Math.max(0, Math.min(10, opts.expectedFlashcards)))
+        .map(q => ({ front: q.question, back: q.answer }))
+        .filter(f => f.front.length > 0 && f.back.length > 0)
+
+    const cleanFlashcards = (cleanFlashcardsRaw.length > 0 ? cleanFlashcardsRaw : fallbackFromQuestions)
         .slice(0, Math.max(0, opts.expectedFlashcards))
 
     let cleanSummary = ensurePointWiseSummary(summary)
@@ -525,7 +640,8 @@ async function saveGeneratedContent(
             is_most_likely: q.is_most_likely || false,
             visual_search_query: q.visual_search_query || null
         }))
-        await supabase.from('exam_questions').insert(questions)
+        const { error } = await supabase.from('exam_questions').insert(questions)
+        if (error) throw error
     }
 
     if (content.flashcards?.length > 0) {
@@ -535,6 +651,7 @@ async function saveGeneratedContent(
             front: f.front,
             back: f.back
         }))
-        await supabase.from('exam_flashcards').insert(flashcards)
+        const { error } = await supabase.from('exam_flashcards').insert(flashcards)
+        if (error) throw error
     }
 }

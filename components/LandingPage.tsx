@@ -70,9 +70,9 @@ const features = [
 ]
 
 const stats = [
-    { value: '10x', label: 'More Productive' },
-    { value: '100%', label: 'Free to Use' },
-    { value: '24/7', label: 'AI Assistant' },
+    { value: '10+', label: 'Study Tools' },
+    { value: 'AI', label: 'Powered' },
+    { value: '24/7', label: 'Available' },
 ]
 
 export default function LandingPage() {
@@ -145,14 +145,14 @@ export default function LandingPage() {
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
                         <Link href="/signup">
                             <Button size="lg" className="w-full sm:w-auto bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white text-lg px-8 py-6 rounded-xl shadow-lg shadow-purple-500/25 transition-all hover:shadow-purple-500/40 hover:scale-105">
-                                Start Free Today
+                                Get Started
                                 <ArrowRight className="ml-2 h-5 w-5" />
                             </Button>
                         </Link>
-                        <Link href="/dashboard">
+                        <Link href="/login">
                             <Button size="lg" variant="outline" className="w-full sm:w-auto text-lg px-8 py-6 rounded-xl border-border hover:bg-muted/50">
-                                <Target className="mr-2 h-5 w-5" />
-                                Try Demo
+                                Sign In
+                                <ArrowRight className="ml-2 h-5 w-5" />
                             </Button>
                         </Link>
                     </div>
@@ -297,7 +297,7 @@ export default function LandingPage() {
                             </p>
                             <Link href="/signup">
                                 <Button size="lg" className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white text-lg px-10 py-6 rounded-xl shadow-lg shadow-purple-500/25 transition-all hover:shadow-purple-500/40 hover:scale-105">
-                                    Get Started for Free
+                                    Get Started
                                     <ArrowRight className="ml-2 h-5 w-5" />
                                 </Button>
                             </Link>
