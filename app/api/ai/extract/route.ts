@@ -14,19 +14,31 @@ export async function POST(req: NextRequest) {
         const { allowed, resetIn } = checkRateLimit(user.id, 'ai_extract', RATE_LIMIT, RATE_LIMIT_WINDOW)
         if (!allowed) return rateLimitResponse(resetIn)
 
-        const formData = await req.formData()
-        const file = formData.get('image') as File
-        const type = formData.get('type') as string
-        const prompt = formData.get('prompt') as string
+        const contentType = req.headers.get('content-type') || ''
 
-        if (!file || !type) {
-            return NextResponse.json({ error: 'Image and type are required' }, { status: 400 })
+        let file: File | null = null
+        let type: string = ''
+        let prompt: string = ''
+        let text: string = ''
+
+        // Handle both FormData (image uploads) and JSON (text-only requests like difficulty)
+        if (contentType.includes('application/json')) {
+            const body = await req.json()
+            type = body.type
+            text = body.text || ''
+            prompt = body.prompt || ''
+        } else {
+            const formData = await req.formData()
+            file = formData.get('image') as File
+            type = formData.get('type') as string
+            prompt = formData.get('prompt') as string
         }
 
-        // Convert file to base64
-        const arrayBuffer = await file.arrayBuffer()
-        const buffer = Buffer.from(arrayBuffer)
-        const base64Image = buffer.toString('base64')
+        // For text-only types like difficulty, we don't need an image
+        const textOnlyTypes = ['difficulty']
+        if (!textOnlyTypes.includes(type) && (!file || !type)) {
+            return NextResponse.json({ error: 'Image and type are required' }, { status: 400 })
+        }
 
         // Define specific prompts based on type
         let systemPrompt = ''
@@ -56,12 +68,46 @@ For VIT India grades: O/S = 10, A = 9, B = 8, C = 7, D = 6, E = 5, F = 0`
                 jsonSchema = 'Return JSON: { "deckName": "string (suggested title)", "flashcards": [{ "front": "string", "back": "string" }] }'
                 break
             case 'timetable':
-                systemPrompt = 'Analyze this timetable/schedule image. It is a university grid. IMPORTANT: Only extract cells that contain actual COURSE CODES (e.g., "CSE3009", "MAT1001") or Subject Names. IGNORE cells that only contain Slot IDs like "A11", "B11", "C1", "D12", etc. If a cell has "A11" but NO course code, it is empty/free. Ignore "Lunch".'
-                jsonSchema = 'Return JSON: { "classes": [{ "day": "string (Full day name e.g. Monday)", "time": "string (Start - End e.g. 08:00 AM - 09:30 AM)", "subject": "string (Course Code + Name)", "location": "string (Room No)" }] }'
+                systemPrompt = `Analyze this university timetable grid image VERY CAREFULLY. This is a weekly schedule with:
+- ROWS = Days of the week (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday)
+- COLUMNS = Time slots (morning to evening, e.g., 08:30, 10:05, 11:40, 13:15, 14:50, 16:25, 18:00, etc.)
+
+YOU MUST SCAN EVERY SINGLE CELL IN THE GRID - from the first column to the LAST column, for EACH day.
+
+For each cell, a class entry typically looks like:
+- "CSE3009-LTP" or "B12-CSE3009-LTP-AB02-429" (Course Code + Type + Room)
+- The format is often: [SlotID]-[CourseCode]-[Type]-[Building][Room]-[RoomNumber]
+
+IGNORE cells that:
+- Only contain slot IDs like "A11", "B12", "C13", "D14", "E13", "F13" without any course info
+- Say "Lunch" or are empty
+
+EXTRACT cells that contain actual course codes (e.g., CSE3009, MAT3002, CDS3005, PLA1006).
+
+Parse the time from the header row (Start/End times shown at top).
+For example, if a cell is in the 08:30 column with End 10:00, use that time range.
+
+IMPORTANT: There may be 8+ columns of classes - extract from ALL of them, not just the first few!`
+                jsonSchema = 'Return JSON: { "classes": [{ "day": "string (Full day name: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday)", "time": "string (HH:MM - HH:MM in 24h format, e.g., 10:05 - 11:35)", "subject": "string (Course Code like CSE3009-LTP)", "location": "string (Room like AB02-429 or AR-202)" }] }'
                 break
             case 'expenses':
                 systemPrompt = 'Analyze this receipt or bill. Extract the items purchased and total.'
                 jsonSchema = 'Return JSON: { "items": [{ "description": "string", "amount": number, "category": "string (food, transport, etc)" }], "total": number }'
+                break
+            case 'difficulty':
+                // Text-based endpoint for estimating course difficulty
+                systemPrompt = `You are an expert academic advisor. Based on these university course names, estimate the difficulty level of each course.
+    
+Consider factors like:
+- Math/Science courses are typically harder (Physics, Calculus, etc.)
+- Programming/Technical courses vary (Data Structures is moderate, ML is hard)
+- Humanities/Languages are typically easier
+- Lab courses add complexity
+
+Course names: ${text || 'No courses provided'}
+
+For EACH course (in the same order provided), return a difficulty rating.`
+                jsonSchema = 'Return JSON: { "difficulties": ["Easy" | "Medium" | "Hard" | "Very Hard"] } - One rating per course, maintaining order'
                 break
             default:
                 systemPrompt = prompt || 'Analyze this image.'
@@ -70,15 +116,33 @@ For VIT India grades: O/S = 10, A = 9, B = 8, C = 7, D = 6, E = 5, F = 0`
 
         const fullPrompt = `${systemPrompt}\n\n${jsonSchema}\n\nIMPORTANT: Return ONLY valid JSON. No markdown formatting.`
 
-        const result = await geminiModel.generateContent([
-            fullPrompt,
-            {
-                inlineData: {
-                    mimeType: file.type,
-                    data: base64Image
-                }
+        let result
+
+        // Handle text-only requests differently
+        if (textOnlyTypes.includes(type)) {
+            // Text-only AI generation (no image)
+            result = await geminiModel.generateContent(fullPrompt)
+        } else {
+            // Image-based AI generation
+            if (!file) {
+                return NextResponse.json({ error: 'Image is required for this type' }, { status: 400 })
             }
-        ])
+
+            // Convert file to base64
+            const arrayBuffer = await file.arrayBuffer()
+            const buffer = Buffer.from(arrayBuffer)
+            const base64Image = buffer.toString('base64')
+
+            result = await geminiModel.generateContent([
+                fullPrompt,
+                {
+                    inlineData: {
+                        mimeType: file.type,
+                        data: base64Image
+                    }
+                }
+            ])
+        }
 
         const responseText = result.response.text()
 

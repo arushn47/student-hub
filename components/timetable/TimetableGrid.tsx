@@ -84,11 +84,116 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
         }
     }, [semesters])
 
+    // Build a color map for all unique subjects - ensures no two subjects share a color
+    const subjectColorMap = useMemo(() => {
+        const map = new Map<string, string>()
+        const uniqueSubjects = new Set<string>()
+
+        // Extract base course codes from all classes
+        for (const cls of classes) {
+            const baseCourse = cls.name.split('-')[0].trim().toUpperCase()
+            uniqueSubjects.add(baseCourse)
+        }
+
+        // Assign colors sequentially to each unique subject
+        const sortedSubjects = Array.from(uniqueSubjects).sort()
+        sortedSubjects.forEach((subject, index) => {
+            map.set(subject, colors[index % colors.length])
+        })
+
+        return map
+    }, [classes])
+
+    // Get color for a subject from the map
+    const getColorForSubject = (subjectName: string): string => {
+        const baseCourse = subjectName.split('-')[0].trim().toUpperCase()
+        return subjectColorMap.get(baseCourse) || colors[0]
+    }
+
     // Filter classes by selected semester
     const filteredClasses = useMemo(() => {
         if (selectedSemester === 'all') return classes
         return classes.filter(c => c.semester_id === selectedSemester || c.semester_id === null)
     }, [classes, selectedSemester])
+
+    // Sync colors for all classes - ensures same subject has same color
+    const syncColors = async () => {
+        const classesToUpdate: { id: string; color: string }[] = []
+
+        for (const cls of classes) {
+            const correctColor = getColorForSubject(cls.name)
+            if (cls.color !== correctColor) {
+                classesToUpdate.push({ id: cls.id, color: correctColor })
+            }
+        }
+
+        if (classesToUpdate.length === 0) return
+
+        // Update in database
+        for (const update of classesToUpdate) {
+            await supabase
+                .from('class_schedules')
+                .update({ color: update.color })
+                .eq('id', update.id)
+        }
+
+        // Update local state
+        setClasses(prev => prev.map(cls => {
+            const update = classesToUpdate.find(u => u.id === cls.id)
+            return update ? { ...cls, color: update.color } : cls
+        }))
+
+        toast.success(`Synced colors for ${classesToUpdate.length} classes`)
+    }
+
+    // Auto-sync colors on initial load
+    useEffect(() => {
+        const autoSyncColors = async () => {
+            const colorMap = new Map<string, string>()
+            const uniqueSubjects = new Set<string>()
+
+            for (const cls of classes) {
+                const baseCourse = cls.name.split('-')[0].trim().toUpperCase()
+                uniqueSubjects.add(baseCourse)
+            }
+
+            const sortedSubjects = Array.from(uniqueSubjects).sort()
+            sortedSubjects.forEach((subject, index) => {
+                colorMap.set(subject, colors[index % colors.length])
+            })
+
+            const classesToUpdate: { id: string; color: string }[] = []
+
+            for (const cls of classes) {
+                const baseCourse = cls.name.split('-')[0].trim().toUpperCase()
+                const correctColor = colorMap.get(baseCourse) || colors[0]
+                if (cls.color !== correctColor) {
+                    classesToUpdate.push({ id: cls.id, color: correctColor })
+                }
+            }
+
+            if (classesToUpdate.length === 0) return
+
+            // Update in database silently
+            for (const update of classesToUpdate) {
+                await supabase
+                    .from('class_schedules')
+                    .update({ color: update.color })
+                    .eq('id', update.id)
+            }
+
+            // Update local state
+            setClasses(prev => prev.map(cls => {
+                const update = classesToUpdate.find(u => u.id === cls.id)
+                return update ? { ...cls, color: update.color } : cls
+            }))
+        }
+
+        if (classes.length > 0) {
+            autoSyncColors()
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []) // Run only on mount
 
     const createClass = async () => {
         if (!newClass.name.trim()) {
@@ -270,7 +375,7 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
                                             start_time: start,
                                             end_time: end,
                                             location: cls.location || '',
-                                            color: colors[Math.floor(Math.random() * colors.length)],
+                                            color: getColorForSubject(cls.subject || cls.name || 'Unknown'),
                                             semester_id: selectedSemester !== 'all' ? selectedSemester : null
                                         }
                                     })

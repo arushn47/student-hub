@@ -65,7 +65,6 @@ const navGroups = [
             { href: '/dashboard/assignments', label: 'Assignments', icon: ClipboardList, color: 'indigo' },
             { href: '/dashboard/grades', label: 'Grades', icon: GraduationCap, color: 'pink' },
             { href: '/dashboard/papers', label: 'Question Papers', icon: FolderOpen, color: 'orange' },
-            { href: '/dashboard/citations', label: 'Citations', icon: Quote, color: 'teal' },
         ]
     },
     {

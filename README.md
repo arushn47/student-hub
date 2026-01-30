@@ -21,7 +21,7 @@ StudentHub is a comprehensive student productivity platform that combines notes,
 - **📆 Calendar** - Unified view of classes, tasks, and assignments
 - **🔔 Reminders** - Never miss a deadline with smart notifications
 - **💰 Budget Tracker** - Manage student expenses
-- **📖 Citation Manager** - Generate citations in various formats
+
 
 ### AI Features (Powered by Gemini)
 - **Study Buddy Chat** - 24/7 AI tutor for explanations and study help
