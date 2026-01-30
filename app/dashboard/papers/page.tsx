@@ -1,15 +1,13 @@
 "use client";
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { PaperUploadDialog } from '@/components/papers/PaperUploadDialog'
 import { PaperListItem } from '@/components/papers/PaperListItem'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Search, Folder } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
 import { COLLEGES, SUBJECTS, EXAM_TYPES } from '@/lib/constants'
 
 interface Paper {
@@ -37,7 +35,7 @@ export default function QuestionPapersPage() {
 
     const supabase = createClient()
 
-    const fetchPapers = async () => {
+    const fetchPapers = useCallback(async () => {
         setLoading(true)
         const { data, error } = await supabase
             .from('question_papers')
@@ -48,11 +46,11 @@ export default function QuestionPapersPage() {
             setPapers(data)
         }
         setLoading(false)
-    }
+    }, [supabase])
 
     useEffect(() => {
         fetchPapers()
-    }, [])
+    }, [fetchPapers])
 
     const filteredPapers = papers.filter(paper => {
         const matchesSearch = paper.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -111,7 +109,7 @@ export default function QuestionPapersPage() {
                             {SUBJECTS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    
+
                     <Select value={examTypeFilter} onValueChange={setExamTypeFilter}>
                         <SelectTrigger className="w-full md:w-40 bg-black/20 border-white/10">
                             <SelectValue placeholder="Exam Type" />

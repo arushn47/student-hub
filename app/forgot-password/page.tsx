@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { BookOpen, Loader2, ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -58,7 +58,7 @@ export default function ForgotPasswordPage() {
                     </CardHeader>
                     <CardContent>
                         <p className="text-sm text-center text-gray-500 mb-4">
-                            Click the link in the email to reset your password. If you don't see it, check your spam folder.
+                            Click the link in the email to reset your password. If you don&apos;t see it, check your spam folder.
                         </p>
                         <Link href="/login">
                             <Button className="w-full" variant="secondary">
@@ -89,7 +89,7 @@ export default function ForgotPasswordPage() {
                     </div>
                     <CardTitle className="text-2xl font-bold text-white">Reset Password</CardTitle>
                     <CardDescription className="text-gray-400">
-                        Enter your email address and we'll send you a link to reset your password
+                        Enter your email address and we&apos;ll send you a link to reset your password
                     </CardDescription>
                 </CardHeader>
 
