@@ -1,4 +1,7 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const sharp = require('sharp');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const path = require('path');
 
 const AI_ICON = 'C:\\Users\\ARUSH\\.gemini\\antigravity\\brain\\6fd2dd41-6b3b-4f93-9353-2337a07f28c3\\studenthub_icon_1774642183213.png';
 
