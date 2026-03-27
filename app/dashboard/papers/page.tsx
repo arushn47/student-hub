@@ -52,6 +52,7 @@ export default function QuestionPapersPage() {
     }, [supabase])
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         fetchPapers()
     }, [fetchPapers])
 

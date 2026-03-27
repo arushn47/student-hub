@@ -22,6 +22,7 @@ export function useFeatureFlags() {
         try {
             const cached = sessionStorage.getItem('feature-flags')
             if (cached) {
+                // eslint-disable-next-line react-hooks/exhaustive-deps
                 setFlags(JSON.parse(cached))
                 setIsLoading(false)
                 return

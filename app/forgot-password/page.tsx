@@ -53,7 +53,7 @@ export default function ForgotPasswordPage() {
                         </div>
                         <CardTitle className="text-2xl font-bold text-white">Check your email</CardTitle>
                         <CardDescription className="text-gray-400">
-                            We've sent a password reset link to <span className="text-white font-medium">{email}</span>
+                            We&apos;ve sent a password reset link to <span className="text-white font-medium">{email}</span>
                         </CardDescription>
                     </CardHeader>
                     <CardContent>

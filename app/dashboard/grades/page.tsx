@@ -154,6 +154,7 @@ export default function GradesPage() {
                     .order('created_at', { ascending: true })
 
                 if (!error && data && data.length > 0) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     setCurriculum(data.map((item: any) => ({
                         id: item.id,
                         name: item.name,
@@ -173,6 +174,7 @@ export default function GradesPage() {
                         .select()
 
                     if (!insertError && inserted) {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         setCurriculum(inserted.map((item: any) => ({
                             id: item.id,
                             name: item.name,

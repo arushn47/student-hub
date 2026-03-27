@@ -1,7 +1,7 @@
 type Task<T> = {
     fn: () => Promise<T>
     resolve: (value: T | PromiseLike<T>) => void
-    reject: (reason?: any) => void
+    reject: (reason?: unknown) => void
     queuedAt: number
     timeoutId?: NodeJS.Timeout
 }
@@ -22,6 +22,7 @@ export class AILimiter {
     private cooldownMs: number
 
     private active = 0
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private queue: Task<any>[] = []
     private failures = 0
     private openUntil: number | null = null
@@ -64,10 +65,12 @@ export class AILimiter {
             // Set a timeout for waiting in queue — if not started within timeout, reject
             task.timeoutId = setTimeout(() => {
                 // Remove from queue if still present
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const idx = this.queue.indexOf(task as any)
                 if (idx !== -1) this.queue.splice(idx, 1)
                 reject(new Error('AI request timed out in queue'))
             }, this.timeoutMs)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             this.queue.push(task as any)
         })
     }
