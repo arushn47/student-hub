@@ -123,8 +123,26 @@ export async function POST() {
             message: `Updated ${updatedCount} assignments with correct status`,
         })
 
-    } catch (error) {
+    } catch (error: unknown) {
         console.error('Resync error:', error)
+
+        const errorObj = error as { code?: number; message?: string }
+        const msg = errorObj.message || (error instanceof Error ? error.message : '')
+
+        if (msg.includes('invalid_grant') || errorObj.code === 401) {
+            return NextResponse.json({
+                error: 'Your Google session has expired. Please reconnect your Google account in Settings.',
+                needsReconnect: true
+            }, { status: 401 })
+        }
+
+        if (errorObj.code === 403 || msg.includes('scope')) {
+            return NextResponse.json({
+                error: 'Please reconnect Google in Settings to enable Classroom access',
+                needsReconnect: true
+            }, { status: 403 })
+        }
+
         return NextResponse.json({ error: 'Failed to resync assignments' }, { status: 500 })
     }
 }

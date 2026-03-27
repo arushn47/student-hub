@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Loader2, Plus, Trash2, CheckCircle2 } from 'lucide-react'
+import { Loader2, Plus, Trash2, CheckCircle2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { GoogleAccount, GoogleService } from '@/lib/google'
 
@@ -170,14 +170,30 @@ export function GoogleAccountsManager({ onConnectionChange }: GoogleAccountsMana
                                     })}
                                 </div>
                             </div>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                onClick={() => disconnectAccount(account.id)}
-                            >
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
+                            <div className="flex flex-col gap-1">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                                    onClick={connectNewAccount}
+                                    disabled={connecting}
+                                    title="Reconnect this account (refresh expired tokens)"
+                                >
+                                    {connecting ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <RefreshCw className="h-4 w-4" />
+                                    )}
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                    onClick={() => disconnectAccount(account.id)}
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
                     ))}
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { geminiModel } from '@/lib/gemini'
-import { getAuthenticatedUser, unauthorizedResponse, rateLimitResponse, checkRateLimit } from '@/lib/api-utils'
+import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/api-utils'
+import { checkRateLimit, rateLimitExceededResponse, rateLimitHeaders } from '@/lib/rate-limit'
 
 // Limit to 10 extractions per hour per user to save costs
 const RATE_LIMIT = 10
@@ -11,8 +12,14 @@ export async function POST(req: NextRequest) {
         const user = await getAuthenticatedUser()
         if (!user) return unauthorizedResponse()
 
-        const { allowed, resetIn } = checkRateLimit(user.id, 'ai_extract', RATE_LIMIT, RATE_LIMIT_WINDOW)
-        if (!allowed) return rateLimitResponse(resetIn)
+        const rl = await checkRateLimit(user.id, 'ai_extract', RATE_LIMIT, RATE_LIMIT_WINDOW / 1000)
+        if (!rl.allowed) {
+            return rateLimitExceededResponse({
+                limit: RATE_LIMIT,
+                remaining: rl.remaining,
+                resetAt: rl.resetAt,
+            })
+        }
 
         const contentType = req.headers.get('content-type') || ''
 
@@ -154,7 +161,18 @@ For EACH course (in the same order provided), return a difficulty rating.`
 
         try {
             const data = JSON.parse(cleanedText)
-            return NextResponse.json({ data })
+            return NextResponse.json(
+                { data },
+                {
+                    headers: {
+                        ...rateLimitHeaders({
+                            limit: RATE_LIMIT,
+                            remaining: rl.remaining,
+                            resetAt: rl.resetAt,
+                        }),
+                    },
+                }
+            )
         } catch (e) {
             console.error('JSON Parse Error:', e, 'Raw Text:', responseText)
             return NextResponse.json({ error: 'Failed to parse AI response', raw: responseText }, { status: 500 })

@@ -4,6 +4,7 @@ export interface Profile {
     email: string
     full_name: string | null
     avatar_url: string | null
+    role: 'user' | 'admin'
     created_at: string
 }
 
@@ -15,6 +16,7 @@ export interface Note {
     content: string | null
     plain_text: string | null
     is_pinned: boolean
+    sort_order?: number
     created_at: string
     updated_at: string
 }

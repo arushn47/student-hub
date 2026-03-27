@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getTasksClient, GoogleTokens } from '@/lib/google'
+import { getTasksClient } from '@/lib/google'
+import { getGoogleTokensForService } from '@/lib/google-accounts'
+import { googleInsufficientScopeResponse, googleReauthResponse, isGoogleReauthError } from '@/lib/google-reauth'
 
 export async function POST(req: Request) {
     try {
@@ -17,17 +19,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('google_tokens, google_connected')
-            .eq('id', user.id)
-            .single()
+        const { tokens } = await getGoogleTokensForService(user.id, 'tasks')
 
-        if (!profile?.google_connected || !profile?.google_tokens) {
-            return NextResponse.json({ error: 'Google not connected' }, { status: 400 })
+        if (!tokens) {
+            return NextResponse.json({ error: 'No Google account connected for Tasks' }, { status: 400 })
         }
 
-        const tokens = profile.google_tokens as GoogleTokens
         const tasksClient = getTasksClient(tokens)
 
         // Delete from Google Tasks
@@ -50,8 +47,21 @@ export async function POST(req: Request) {
 
     } catch (error: unknown) {
         console.error('Delete sync error:', error)
+        const errorObj = error as { code?: number; message?: string }
+        const msg = errorObj.message || (error instanceof Error ? error.message : '')
+
+        // Token expired / revoked
+        if (isGoogleReauthError(error) || msg.includes('invalid_grant') || errorObj.code === 401) {
+            return googleReauthResponse('Your Google session has expired. Please reconnect your Google account in Settings to delete tasks.')
+        }
+
+        // Insufficient scope
+        if (errorObj.code === 403 || msg.toLowerCase().includes('scope')) {
+            return googleInsufficientScopeResponse('Please reconnect Google in Settings to enable Tasks access.')
+        }
+
         // If 404, it might already be deleted, so we can consider it success or ignore
-        const errorMessage = error instanceof Error ? error.message : 'Sync failed'
+        const errorMessage = msg || 'Sync failed'
         return NextResponse.json({ error: errorMessage }, { status: 500 })
     }
 }

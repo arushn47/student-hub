@@ -529,34 +529,72 @@
 /* ============================================
    TIPTAP TASK LIST styling
    ============================================ */
-ul[data-type="taskList"] {
+.ProseMirror ul[data-type="taskList"],
+.prose ul[data-type="taskList"] {
   list-style: none;
   padding: 0 !important;
   margin: 0.5rem 0 !important;
 }
 
-li[data-type="taskItem"] {
+.ProseMirror li[data-type="taskItem"],
+.ProseMirror li[data-checked],
+.prose li[data-type="taskItem"],
+.prose li[data-checked] {
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
+  flex-wrap: nowrap !important;
   gap: 0.5rem;
   padding: 0.25rem 0;
 }
 
-li[data-type="taskItem"]>label {
+.ProseMirror li[data-type="taskItem"]>label,
+.ProseMirror li[data-checked]>label,
+.prose li[data-type="taskItem"]>label,
+.prose li[data-checked]>label {
   display: inline-flex !important;
   align-items: center !important;
   flex-shrink: 0;
   margin-right: 0.5rem;
 }
 
-li[data-type="taskItem"]>div {
+.ProseMirror li[data-type="taskItem"]>div,
+.ProseMirror li[data-checked]>div,
+.prose li[data-type="taskItem"]>div,
+.prose li[data-checked]>div {
   flex: 1;
-  display: inline;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  margin: 0 !important;
+}
+
+.ProseMirror li[data-type="taskItem"]>div>p,
+.ProseMirror li[data-checked]>div>p,
+.prose li[data-type="taskItem"]>div>p,
+.prose li[data-checked]>div>p {
+  margin: 0;
+}
+
+.ProseMirror li[data-type="taskItem"]>div>*:first-child,
+.ProseMirror li[data-checked]>div>*:first-child,
+.prose li[data-type="taskItem"]>div>*:first-child,
+.prose li[data-checked]>div>*:first-child {
+  margin-top: 0 !important;
+}
+
+.ProseMirror li[data-type="taskItem"]>div>*:last-child,
+.ProseMirror li[data-checked]>div>*:last-child,
+.prose li[data-type="taskItem"]>div>*:last-child,
+.prose li[data-checked]>div>*:last-child {
+  margin-bottom: 0 !important;
 }
 
 /* Custom Checkbox Style */
-li[data-type="taskItem"] input[type="checkbox"] {
+.ProseMirror li[data-type="taskItem"] input[type="checkbox"],
+.ProseMirror li[data-checked] input[type="checkbox"],
+.prose li[data-type="taskItem"] input[type="checkbox"],
+.prose li[data-checked] input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
   background-color: transparent;
@@ -574,12 +612,30 @@ li[data-type="taskItem"] input[type="checkbox"] {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-li[data-type="taskItem"] input[type="checkbox"]:hover {
+.ProseMirror li[data-type="taskItem"] input[type="checkbox"]:focus,
+.ProseMirror li[data-type="taskItem"] input[type="checkbox"]:focus-visible,
+.ProseMirror li[data-checked] input[type="checkbox"]:focus,
+.ProseMirror li[data-checked] input[type="checkbox"]:focus-visible,
+.prose li[data-type="taskItem"] input[type="checkbox"]:focus,
+.prose li[data-type="taskItem"] input[type="checkbox"]:focus-visible,
+.prose li[data-checked] input[type="checkbox"]:focus,
+.prose li[data-checked] input[type="checkbox"]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.ProseMirror li[data-type="taskItem"] input[type="checkbox"]:hover,
+.ProseMirror li[data-checked] input[type="checkbox"]:hover,
+.prose li[data-type="taskItem"] input[type="checkbox"]:hover,
+.prose li[data-checked] input[type="checkbox"]:hover {
   border-color: rgba(168, 85, 247, 1);
   background-color: rgba(168, 85, 247, 0.1);
 }
 
-li[data-type="taskItem"] input[type="checkbox"]::before {
+.ProseMirror li[data-type="taskItem"] input[type="checkbox"]::before,
+.ProseMirror li[data-checked] input[type="checkbox"]::before,
+.prose li[data-type="taskItem"] input[type="checkbox"]::before,
+.prose li[data-checked] input[type="checkbox"]::before {
   content: "";
   width: 10px;
   height: 10px;
@@ -589,16 +645,23 @@ li[data-type="taskItem"] input[type="checkbox"]::before {
   clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
 }
 
-li[data-type="taskItem"] input[type="checkbox"]:checked {
+.ProseMirror li[data-type="taskItem"] input[type="checkbox"]:checked,
+.ProseMirror li[data-checked] input[type="checkbox"]:checked,
+.prose li[data-type="taskItem"] input[type="checkbox"]:checked,
+.prose li[data-checked] input[type="checkbox"]:checked {
   background: linear-gradient(135deg, #a855f7, #ec4899);
   border-color: transparent;
 }
 
-li[data-type="taskItem"] input[type="checkbox"]:checked::before {
+.ProseMirror li[data-type="taskItem"] input[type="checkbox"]:checked::before,
+.ProseMirror li[data-checked] input[type="checkbox"]:checked::before,
+.prose li[data-type="taskItem"] input[type="checkbox"]:checked::before,
+.prose li[data-checked] input[type="checkbox"]:checked::before {
   transform: scale(1);
 }
 
-li[data-type="taskItem"][data-checked="true"]>div {
+.ProseMirror li[data-type="taskItem"][data-checked="true"]>div,
+.prose li[data-type="taskItem"][data-checked="true"]>div {
   text-decoration: line-through;
   color: var(--muted-foreground);
   opacity: 0.6;

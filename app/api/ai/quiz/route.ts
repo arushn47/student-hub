@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { generateJSON } from '@/lib/gemini'
-import { getAuthenticatedUser, unauthorizedResponse, checkRateLimit, rateLimitResponse } from '@/lib/api-utils'
+import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/api-utils'
+import { checkRateLimit, rateLimitExceededResponse, rateLimitHeaders, RATE_LIMITS } from '@/lib/rate-limit'
+import { createClient } from '@/lib/supabase/server'
 import type { QuizQuestion } from '@/types'
 
 export async function POST(request: Request) {
@@ -11,13 +13,21 @@ export async function POST(request: Request) {
             return unauthorizedResponse()
         }
 
-        // Check rate limit (5 quiz generations per minute)
-        const rateLimit = checkRateLimit(user.id, 'quiz', 5, 60000)
-        if (!rateLimit.allowed) {
-            return rateLimitResponse(rateLimit.resetIn)
+        const rl = await checkRateLimit(
+            user.id,
+            RATE_LIMITS.ai_general.endpoint,
+            RATE_LIMITS.ai_general.limit,
+            RATE_LIMITS.ai_general.windowSeconds
+        )
+        if (!rl.allowed) {
+            return rateLimitExceededResponse({
+                limit: RATE_LIMITS.ai_general.limit,
+                remaining: rl.remaining,
+                resetAt: rl.resetAt,
+            })
         }
 
-        const { content } = await request.json()
+        const { content, noteId } = await request.json()
 
         if (!content || typeof content !== 'string') {
             return NextResponse.json(
@@ -27,7 +37,44 @@ export async function POST(request: Request) {
         }
 
         // Limit input size to prevent token abuse
-        const truncatedContent = content.slice(0, 5000)
+        const truncatedContent = content.slice(0, 5000).trim()
+
+        // 1. Generate a stable hash for the note content
+        const contentHash = Array.from(
+            new Uint8Array(
+                await crypto.subtle.digest('SHA-256', new TextEncoder().encode(truncatedContent))
+            )
+        ).map(b => b.toString(16).padStart(2, '0')).join('')
+
+        const supabase = await createClient()
+
+        // 2. Check the per-note cache
+        if (noteId) {
+            const { data: noteCache } = await supabase
+                .from('notes')
+                .select('ai_quizzes')
+                .eq('id', noteId)
+                .eq('user_id', user.id)
+                .single()
+
+            if (noteCache?.ai_quizzes && noteCache.ai_quizzes[contentHash]) {
+                console.log('✅ QUIZ: Cache hit for', noteId)
+                return NextResponse.json(
+                    { questions: noteCache.ai_quizzes[contentHash], source: 'cache' },
+                    {
+                        headers: {
+                            ...rateLimitHeaders({
+                                limit: RATE_LIMITS.ai_general.limit,
+                                remaining: rl.remaining,
+                                resetAt: rl.resetAt,
+                            })
+                        }
+                    }
+                )
+            }
+        }
+
+        console.log('❌ QUIZ: Cache miss, calling Gemini')
 
         const prompt = `Based on the following study notes, generate 4 multiple-choice quiz questions to help the student test their understanding.
 
@@ -59,11 +106,38 @@ Where correctAnswer is the 0-based index of the correct option.`
             throw new Error('Invalid quiz format')
         }
 
+        // 3. Save response to cache if noteId was provided
+        if (noteId) {
+            const { data: currentNote } = await supabase
+                .from('notes')
+                .select('ai_quizzes')
+                .eq('id', noteId)
+                .eq('user_id', user.id)
+                .single()
+
+            const currentQuizzes = currentNote?.ai_quizzes || {}
+
+            await supabase
+                .from('notes')
+                .update({
+                    ai_quizzes: {
+                        ...currentQuizzes,
+                        [contentHash]: questions
+                    }
+                })
+                .eq('id', noteId)
+                .eq('user_id', user.id)
+        }
+
         return NextResponse.json(
-            { questions },
+            { questions, source: 'gemini' },
             {
                 headers: {
-                    'X-RateLimit-Remaining': rateLimit.remaining.toString()
+                    ...rateLimitHeaders({
+                        limit: RATE_LIMITS.ai_general.limit,
+                        remaining: rl.remaining,
+                        resetAt: rl.resetAt,
+                    })
                 }
             }
         )

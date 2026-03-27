@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { GoogleTokens, GoogleAccount, GoogleService } from '@/lib/google'
+import { validateServerEnv } from '@/lib/env'
+
+validateServerEnv()
 
 /**
  * Get Google tokens for a specific service.

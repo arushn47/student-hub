@@ -43,6 +43,14 @@ import {
     UserPlus,
     RefreshCw
 } from 'lucide-react'
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { format, isPast, isToday } from 'date-fns'
@@ -89,6 +97,7 @@ export default function AssignmentsPage() {
     const [importing, setImporting] = useState(false)
     const [filter, setFilter] = useState<string>('assigned')
     const [resyncing, setResyncing] = useState(false)
+    const [googleAlert, setGoogleAlert] = useState<{ open: boolean; message: string }>({ open: false, message: '' })
     const [newAssignment, setNewAssignment] = useState({
         title: '',
         course: '',
@@ -106,6 +115,8 @@ export default function AssignmentsPage() {
             if (res.ok) {
                 toast.success(data.message || `Updated ${data.updated} assignments`)
                 fetchAssignments()
+            } else if (data.needsReconnect) {
+                setGoogleAlert({ open: true, message: data.error })
             } else {
                 toast.error(data.error || 'Failed to resync')
             }
@@ -251,15 +262,10 @@ export default function AssignmentsPage() {
             const data = await res.json()
 
             if (!res.ok) {
-                if (data.error === 'Google not connected') {
-                    toast.error('Please connect Google in Settings first')
-                } else if (data.needsReconnect) {
-                    toast.error('Please reconnect Google in Settings to enable Classroom access', {
-                        duration: 5000,
-                        action: {
-                            label: 'Go to Settings',
-                            onClick: () => window.location.href = '/dashboard/settings'
-                        }
+                if (data.needsReconnect || data.error === 'No Google account connected for Classroom' || data.error === 'Google not connected') {
+                    setGoogleAlert({
+                        open: true,
+                        message: data.error || 'Please connect your Google account to import assignments from Classroom.',
                     })
                 } else {
                     toast.error(data.error || 'Failed to import')
@@ -269,8 +275,7 @@ export default function AssignmentsPage() {
 
             toast.success(data.message || `Imported ${data.imported} assignments`)
             fetchAssignments()
-        } catch (error) {
-            console.error('Import error:', error)
+        } catch {
             toast.error('Failed to import from Google Classroom')
         } finally {
             setImporting(false)
@@ -508,6 +513,47 @@ export default function AssignmentsPage() {
                     ))}
                 </div>
             )}
+
+            {/* Google Reconnect Alert Dialog */}
+            <AlertDialog open={googleAlert.open} onOpenChange={(open) => setGoogleAlert((prev) => ({ ...prev, open }))}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5 text-amber-500" />
+                            Google Account Not Connected
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-2">
+                            <span className="block">
+                                {googleAlert.message || 'Your Google account needs to be connected to import assignments from Google Classroom.'}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                                Click &quot;Reconnect Now&quot; to re-authorize your Google account, or go to Settings to manage your accounts.
+                            </span>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <Button variant="outline" onClick={() => setGoogleAlert({ open: false, message: '' })}>
+                            Maybe Later
+                        </Button>
+                        <Button
+                            onClick={async () => {
+                                setGoogleAlert({ open: false, message: '' })
+                                try {
+                                    const res = await fetch('/api/auth/google')
+                                    const { authUrl } = await res.json()
+                                    window.location.href = authUrl
+                                } catch {
+                                    window.location.href = '/dashboard/settings'
+                                }
+                            }}
+                            className="gap-2"
+                        >
+                            <GoogleIcon className="h-4 w-4" />
+                            Reconnect Now
+                        </Button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }
@@ -578,7 +624,7 @@ function AssignmentCard({
                                         <span className="hidden sm:inline">Chat</span>
                                     </Button>
                                 </SheetTrigger>
-                                <SheetContent side="right" className="w-[350px] sm:w-[400px] p-0">
+                                <SheetContent side="right" className="w-87.5 sm:w-100 p-0">
                                     <GroupChat groupId={assignment.group_id} assignmentTitle={assignment.title} />
                                 </SheetContent>
                             </Sheet>
@@ -595,7 +641,7 @@ function AssignmentCard({
                         )}
 
                         <Select value={assignment.status} onValueChange={(v) => onStatusChange(v as Assignment['status'])}>
-                            <SelectTrigger className="w-[130px]">
+                            <SelectTrigger className="w-32.5">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { generateJSON } from '@/lib/gemini'
-import { getAuthenticatedUser, unauthorizedResponse, checkRateLimit, rateLimitResponse } from '@/lib/api-utils'
+import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/api-utils'
+import { checkRateLimit, rateLimitExceededResponse, rateLimitHeaders, RATE_LIMITS } from '@/lib/rate-limit'
 
 export async function POST(request: Request) {
     try {
@@ -10,10 +11,18 @@ export async function POST(request: Request) {
             return unauthorizedResponse()
         }
 
-        // Check rate limit (10 breakdown requests per minute)
-        const rateLimit = checkRateLimit(user.id, 'breakdown', 10, 60000)
-        if (!rateLimit.allowed) {
-            return rateLimitResponse(rateLimit.resetIn)
+        const rl = await checkRateLimit(
+            user.id,
+            RATE_LIMITS.ai_general.endpoint,
+            RATE_LIMITS.ai_general.limit,
+            RATE_LIMITS.ai_general.windowSeconds
+        )
+        if (!rl.allowed) {
+            return rateLimitExceededResponse({
+                limit: RATE_LIMITS.ai_general.limit,
+                remaining: rl.remaining,
+                resetAt: rl.resetAt,
+            })
         }
 
         const { task } = await request.json()
@@ -56,7 +65,11 @@ Keep subtask titles concise but clear.`
             { subtasks: result.subtasks },
             {
                 headers: {
-                    'X-RateLimit-Remaining': rateLimit.remaining.toString()
+                    ...rateLimitHeaders({
+                        limit: RATE_LIMITS.ai_general.limit,
+                        remaining: rl.remaining,
+                        resetAt: rl.resetAt,
+                    })
                 }
             }
         )

@@ -21,6 +21,8 @@ export function SpeechToTextButton({ onTranscript, className, disabled }: Speech
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const recognitionRef = useRef<any>(null)
 
+    const requestedStartToastRef = useRef(false)
+
     useEffect(() => {
         if (!isSpeechRecognitionSupported) return
 
@@ -31,6 +33,14 @@ export function SpeechToTextButton({ onTranscript, className, disabled }: Speech
         recognitionInstance.continuous = true
         recognitionInstance.interimResults = true
         recognitionInstance.lang = 'en-US'
+
+        recognitionInstance.onstart = () => {
+            setIsListening(true)
+            if (!requestedStartToastRef.current) {
+                requestedStartToastRef.current = true
+                toast.info('🎤 Listening... Speak now!')
+            }
+        }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recognitionInstance.onresult = (event: any) => {
@@ -60,10 +70,16 @@ export function SpeechToTextButton({ onTranscript, className, disabled }: Speech
                 // 'aborted' is normal when user stops - suppress it
                 return
             }
-            console.error('Speech recognition error:', event.error)
-            if (event.error === 'not-allowed') {
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                console.warn('Speech recognition: Microphone access denied.')
                 toast.error('Microphone access denied. Please enable it in browser settings.')
-            } else { // Removed 'else if (event.error !== 'aborted')' as 'aborted' is handled above
+                try {
+                    recognitionInstance.abort()
+                } catch {
+                    // ignore
+                }
+            } else {
+                console.warn('Speech recognition error:', event.error)
                 toast.error('Speech recognition error: ' + event.error)
             }
             setIsListening(false)
@@ -71,6 +87,7 @@ export function SpeechToTextButton({ onTranscript, className, disabled }: Speech
 
         recognitionInstance.onend = () => {
             setIsListening(false)
+            requestedStartToastRef.current = false
         }
 
         recognitionRef.current = recognitionInstance
@@ -80,22 +97,46 @@ export function SpeechToTextButton({ onTranscript, className, disabled }: Speech
         }
     }, [onTranscript])
 
-    const toggleListening = useCallback(() => {
+    const toggleListening = useCallback(async () => {
         if (!recognitionRef.current) {
             toast.error('Speech recognition not supported in this browser')
             return
         }
 
         if (isListening) {
-            recognitionRef.current.stop()
+            try {
+                recognitionRef.current.stop()
+            } catch {
+                // ignore
+            }
             setIsListening(false)
+            requestedStartToastRef.current = false
         } else {
             try {
+                // Preflight mic permission so the browser prompts reliably.
+                if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+                        for (const track of stream.getTracks()) track.stop()
+                    } catch {
+                        toast.error('Microphone permission is blocked. Please allow it in browser settings.')
+                        setIsListening(false)
+                        requestedStartToastRef.current = false
+                        return
+                    }
+                }
+
+                requestedStartToastRef.current = false
                 recognitionRef.current.start()
-                setIsListening(true)
-                toast.info('🎤 Listening... Speak now!')
-            } catch {
-                // Already started
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : ''
+                // InvalidStateError happens if start() is called twice.
+                if (!message.toLowerCase().includes('invalidstate')) {
+                    console.warn('Speech recognition start failed:', err)
+                    toast.error('Could not start voice input. Please try again.')
+                }
+                setIsListening(false)
+                requestedStartToastRef.current = false
             }
         }
     }, [isListening])

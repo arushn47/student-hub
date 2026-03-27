@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getCalendarClient, GoogleTokens } from '@/lib/google'
+import { getCalendarClient } from '@/lib/google'
+import { getGoogleTokensForService } from '@/lib/google-accounts'
 
 // GET: Fetch events from Google Calendar
 export async function GET(req: NextRequest) {
@@ -12,18 +13,12 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // Get Google tokens from profile
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('google_tokens, google_connected')
-            .eq('id', user.id)
-            .single()
+        const { tokens } = await getGoogleTokensForService(user.id, 'calendar')
 
-        if (!profile?.google_connected || !profile?.google_tokens) {
-            return NextResponse.json({ error: 'Google not connected' }, { status: 400 })
+        if (!tokens) {
+            return NextResponse.json({ error: 'No Google account connected for Calendar' }, { status: 400 })
         }
 
-        const tokens = profile.google_tokens as GoogleTokens
         const calendar = getCalendarClient(tokens)
 
         // Get timeMin and timeMax from query params, default to current week
@@ -70,17 +65,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('google_tokens, google_connected')
-            .eq('id', user.id)
-            .single()
+        const { tokens } = await getGoogleTokensForService(user.id, 'calendar')
 
-        if (!profile?.google_connected || !profile?.google_tokens) {
-            return NextResponse.json({ error: 'Google not connected' }, { status: 400 })
+        if (!tokens) {
+            return NextResponse.json({ error: 'No Google account connected for Calendar' }, { status: 400 })
         }
 
-        const tokens = profile.google_tokens as GoogleTokens
         const calendar = getCalendarClient(tokens)
 
         const body = await req.json()

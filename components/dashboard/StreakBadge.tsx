@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Flame, TrendingUp, CheckCircle2 } from 'lucide-react'
+import { Flame, TrendingUp, CheckCircle2, Sparkles } from 'lucide-react'
 
 interface StreakData {
     streak: number
@@ -13,10 +13,8 @@ export function StreakBadge({ pendingTasks }: { pendingTasks: number }) {
     const [streakData, setStreakData] = useState<StreakData>({ streak: 0, loading: true })
 
     useEffect(() => {
-        // Log activity on page load
-        fetch('/api/activity', { method: 'POST' }).catch(console.error)
-
-        // Fetch streak
+        // Only read streak — activity is logged by actual user actions,
+        // not by merely loading the dashboard.
         fetch('/api/activity')
             .then(res => res.json())
             .then(data => {
@@ -37,12 +35,22 @@ export function StreakBadge({ pendingTasks }: { pendingTasks: number }) {
         )
     }
 
-    // Show streak if user has one
-    if (streakData.streak > 0) {
+    // Show flame streak badge only for 2+ consecutive days
+    if (streakData.streak >= 2) {
         return (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">
                 <Flame className="h-4 w-4" />
                 <span className="font-medium">{streakData.streak} day streak 🔥</span>
+            </div>
+        )
+    }
+
+    // Active today but no multi-day streak yet
+    if (streakData.isActiveToday) {
+        return (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <Sparkles className="h-4 w-4" />
+                <span className="font-medium">Active today ✨</span>
             </div>
         )
     }

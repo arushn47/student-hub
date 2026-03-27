@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Search, Folder } from 'lucide-react'
-import { COLLEGES, SUBJECTS, EXAM_TYPES } from '@/lib/constants'
+import { SUBJECTS, EXAM_TYPES } from '@/lib/constants'
+import { useAuth } from '@/lib/auth-context'
 
 interface Paper {
     id: string
@@ -18,6 +19,8 @@ interface Paper {
     exam_type: string | null
     year: number
     file_url: string | null
+    file_path?: string | null
+    uploaded_by: string | null
     created_at: string
 }
 
@@ -25,7 +28,6 @@ export default function QuestionPapersPage() {
     const [papers, setPapers] = useState<Paper[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
-    const [collegeFilter, setCollegeFilter] = useState('all')
     const [subjectFilter, setSubjectFilter] = useState('all')
     const [yearFilter, setYearFilter] = useState('all')
     const [examTypeFilter, setExamTypeFilter] = useState('all')
@@ -34,6 +36,7 @@ export default function QuestionPapersPage() {
     const years = Array.from(new Set(papers.map(p => p.year))).sort((a, b) => b - a)
 
     const supabase = createClient()
+    const { user, isAdmin } = useAuth()
 
     const fetchPapers = useCallback(async () => {
         setLoading(true)
@@ -54,15 +57,13 @@ export default function QuestionPapersPage() {
 
     const filteredPapers = papers.filter(paper => {
         const matchesSearch = paper.title.toLowerCase().includes(search.toLowerCase()) ||
-            paper.college.toLowerCase().includes(search.toLowerCase()) ||
             paper.subject.toLowerCase().includes(search.toLowerCase())
 
-        const matchesCollege = collegeFilter === 'all' || paper.college === collegeFilter
         const matchesSubject = subjectFilter === 'all' || paper.subject === subjectFilter
         const matchesYear = yearFilter === 'all' || paper.year.toString() === yearFilter
         const matchesExamType = examTypeFilter === 'all' || paper.exam_type === examTypeFilter
 
-        return matchesSearch && matchesCollege && matchesSubject && matchesYear && matchesExamType
+        return matchesSearch && matchesSubject && matchesYear && matchesExamType
     })
 
     return (
@@ -84,22 +85,13 @@ export default function QuestionPapersPage() {
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
                     <Input
-                        placeholder="Search papers, colleges, subjects..."
+                        placeholder="Search papers, subjects..."
                         className="pl-9 bg-black/20 border-white/10"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                     />
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0">
-                    <Select value={collegeFilter} onValueChange={setCollegeFilter}>
-                        <SelectTrigger className="w-full md:w-50 bg-black/20 border-white/10">
-                            <SelectValue placeholder="All Colleges" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60">
-                            <SelectItem value="all">All Colleges</SelectItem>
-                            {COLLEGES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
                     <Select value={subjectFilter} onValueChange={setSubjectFilter}>
                         <SelectTrigger className="w-full md:w-50 bg-black/20 border-white/10">
                             <SelectValue placeholder="All Subjects" />
@@ -139,7 +131,37 @@ export default function QuestionPapersPage() {
                     ))
                 ) : filteredPapers.length > 0 ? (
                     filteredPapers.map(paper => (
-                        <PaperListItem key={paper.id} paper={paper} />
+                        <PaperListItem
+                            key={paper.id}
+                            paper={paper}
+                            currentUserId={user?.id}
+                            isAdmin={isAdmin}
+                            onDelete={async () => {
+                                // Delete from storage if file_url exists
+                                if (paper.file_url) {
+                                    try {
+                                        // Extract storage path from public URL
+                                        const url = new URL(paper.file_url)
+                                        const pathMatch = url.pathname.match(/\/storage\/v1\/object\/public\/papers\/(.+)/)
+                                        if (pathMatch?.[1]) {
+                                            await supabase.storage.from('papers').remove([decodeURIComponent(pathMatch[1])])
+                                        }
+                                    } catch {
+                                        // Storage deletion failed, continue with DB deletion
+                                    }
+                                }
+                                // Delete from DB
+                                const { error } = await supabase
+                                    .from('question_papers')
+                                    .delete()
+                                    .eq('id', paper.id)
+                                if (error) {
+                                    throw error
+                                }
+                                // Refresh list
+                                fetchPapers()
+                            }}
+                        />
                     ))
                 ) : (
                     <div className="text-center py-20 text-gray-500 bg-black/20 rounded-2xl border border-dashed border-white/5">
@@ -150,7 +172,6 @@ export default function QuestionPapersPage() {
                             variant="outline"
                             className="text-gray-400 border-white/10 hover:text-white"
                             onClick={() => {
-                                setCollegeFilter('all')
                                 setSubjectFilter('all')
                                 setYearFilter('all')
                                 setExamTypeFilter('all')

@@ -13,6 +13,8 @@ export default async function NotesPage() {
         // It will return:
         // 1. Notes I own (policy "Users can view own notes") 
         // 2. Notes shared with me (policy "Users can view shared notes")
+        .order('is_pinned', { ascending: false })
+        .order('sort_order', { ascending: true })
         .order('updated_at', { ascending: false })
 
     return <NotesList initialNotes={(notes || []) as Note[]} />

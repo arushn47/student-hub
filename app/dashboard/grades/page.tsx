@@ -130,10 +130,15 @@ export default function GradesPage() {
     const [showCurriculum, setShowCurriculum] = useState(false)
 
     // Grade Improvement Advisor state
-    const [improvementLimit, setImprovementLimit] = useState(3)
+    // 'improvementLimit' is removed as usage is manual now.
+    const [selectedImprovementIds, setSelectedImprovementIds] = useState<string[]>([])
+    const [courseTargetGrades, setCourseTargetGrades] = useState<Record<string, string>>({})
     const [showImprovementAdvisor, setShowImprovementAdvisor] = useState(false)
     const [courseDifficulties, setCourseDifficulties] = useState<Record<string, string>>({})
     const [loadingDifficulties, setLoadingDifficulties] = useState(false)
+
+    // Helper to get target for a course (default S)
+    const getTarget = (courseId: string) => courseTargetGrades[courseId] || 'S'
 
     // Load curriculum from DB
     useEffect(() => {
@@ -278,50 +283,70 @@ export default function GradesPage() {
         const totalGPACredits = courses.reduce((sum, c) => c.grade === 'P' ? sum : sum + c.credits, 0)
         const currentTotalPoints = currentCGPA * totalGPACredits
 
-        // Improvable grades (A to E, excluding F which requires arrear exams, and P which is pass/fail)
-        const improvableGrades = ['A', 'B', 'C', 'D', 'E']
-        const upgradeTargets: Record<string, string[]> = {
-            'A': ['S'],
-            'B': ['S', 'A'],
-            'C': ['S', 'A', 'B'],
-            'D': ['S', 'A', 'B', 'C'],
-            'E': ['S', 'A', 'B', 'C', 'D']
-        }
+        // Improvable grades (must be less than target)
+        // Valid grades for calculation
+        const validGrades = ['S', 'A', 'B', 'C', 'D', 'E']
 
         const candidates = courses
-            .filter(c => improvableGrades.includes(c.grade))
+            .filter(c => {
+                if (!validGrades.includes(c.grade)) return false
+                const currentP = gradePoints[c.grade] ?? 0
+                const targetP = gradePoints[getTarget(c.id)] ?? 0
+                return currentP < targetP
+            })
             .map(course => {
                 const currentPoints = gradePoints[course.grade] ?? 0
+
+                // Calculate boost for the specific target
+                const targetPoints = gradePoints[getTarget(course.id)] ?? 0
+                const pointDiff = (targetPoints - currentPoints) * course.credits
+                const newTotalPoints = currentTotalPoints + pointDiff
+                const newCGPA = totalGPACredits > 0 ? newTotalPoints / totalGPACredits : 0
+                const targetBoost = newCGPA - currentCGPA
+
+                // Calculate all possible upgrades for display
+                const upgradeTargets: Record<string, string[]> = {
+                    'A': ['S'],
+                    'B': ['S', 'A'],
+                    'C': ['S', 'A', 'B'],
+                    'D': ['S', 'A', 'B', 'C'],
+                    'E': ['S', 'A', 'B', 'C', 'D']
+                }
+
                 const targets = upgradeTargets[course.grade] || []
 
                 const upgrades = targets.map(targetGrade => {
                     const newPoints = gradePoints[targetGrade] ?? 0
-                    const pointDiff = (newPoints - currentPoints) * course.credits
-                    const newTotalPoints = currentTotalPoints + pointDiff
-                    const newCGPA = totalGPACredits > 0 ? newTotalPoints / totalGPACredits : 0
-                    const cgpaBoost = newCGPA - currentCGPA
+                    const pDiff = (newPoints - currentPoints) * course.credits
+                    const nTotalPoints = currentTotalPoints + pDiff
+                    const nCGPA = totalGPACredits > 0 ? nTotalPoints / totalGPACredits : 0
+                    const boost = nCGPA - currentCGPA
 
                     return {
                         targetGrade,
-                        newCGPA: newCGPA.toFixed(2),
-                        cgpaBoost: cgpaBoost.toFixed(3)
+                        newCGPA: nCGPA.toFixed(2),
+                        cgpaBoost: boost.toFixed(3)
                     }
                 })
-
-                // Max possible boost (if upgraded to S)
-                const maxBoost = parseFloat(upgrades[0]?.cgpaBoost || '0')
 
                 return {
                     course,
                     upgrades,
-                    maxBoost,
+                    maxBoost: targetBoost, // Use the target boost for sorting/logic
                     difficulty: courseDifficulties[course.id] || 'Unknown'
                 }
             })
-            .sort((a, b) => b.maxBoost - a.maxBoost)
+            .sort((a, b) => {
+                const aSelected = selectedImprovementIds.includes(a.course.id)
+                const bSelected = selectedImprovementIds.includes(b.course.id)
+
+                if (aSelected && !bSelected) return -1
+                if (!aSelected && bSelected) return 1
+                return b.maxBoost - a.maxBoost
+            })
 
         return candidates
-    }, [courses, cgpa, courseDifficulties])
+    }, [courses, cgpa, courseDifficulties, courseTargetGrades, selectedImprovementIds])
 
     // Fetch AI difficulty ratings
     // Fetch AI difficulty ratings
@@ -554,24 +579,48 @@ export default function GradesPage() {
 
     // Calculate future CGPA scenarios
     const cgpaAnalysis = useMemo(() => {
-        const currentCredits = totalCredits
-        const currentCGPA = parseFloat(cgpa) || 0
-        const remainingCredits = Math.max(0, programCredits - currentCredits)
+        // Calculate true Quality Points and Graded Credits (for GPA)
+        let currentGradedCredits = 0
+        let currentPoints = 0
+
+        courses.forEach(c => {
+            if (c.grade !== 'P') {
+                // F grades count strictly as 0 points but contribute to graded credits
+                currentGradedCredits += c.credits
+                currentPoints += (gradePoints[c.grade] ?? 0) * c.credits
+            }
+        })
+
+        // Credits that count towards graduation (usually P counts, F does not)
+        // 'totalCredits' (from line 271) already handles "Earned" (excludes F)
+        // We use this to determine how many credits are *left* to take.
+        const earnedCredits = totalCredits
+        const remainingCredits = Math.max(0, programCredits - earnedCredits)
         const remainingSemesters = Math.ceil(remainingCredits / CREDITS_PER_SEMESTER)
-        const currentPoints = currentCGPA * currentCredits
 
         // What if scenarios - if you get all X grade from now
+        // Formula: (CurrentQP + FutureQP) / (CurrentGradedCredits + FutureGradedCredits)
+        // We assume remaining credits will all be graded (optimistic but standard for projection)
         const whatIf = (gradeGPA: number) => {
-            if (remainingCredits <= 0) return currentCGPA.toFixed(2)
+            if (remainingCredits <= 0) return (currentGradedCredits > 0 ? currentPoints / currentGradedCredits : 0).toFixed(2)
+
             const futurePoints = currentPoints + (gradeGPA * remainingCredits)
-            return (futurePoints / programCredits).toFixed(2)
+            const projectedTotalGradedCredits = currentGradedCredits + remainingCredits
+
+            return (futurePoints / projectedTotalGradedCredits).toFixed(2)
         }
 
         // Calculate required GPA to reach target
         const requiredForTarget = (targetCGPA: number) => {
-            if (remainingCredits <= 0) return { achievable: true, gpa: 0, alreadyDone: true }
-            const targetPoints = targetCGPA * programCredits
-            const neededPoints = targetPoints - currentPoints
+            if (remainingCredits <= 0) {
+                // Check if already achieved
+                const current = currentGradedCredits > 0 ? (currentPoints / currentGradedCredits) : 0
+                return { achievable: current >= targetCGPA, gpa: 0, alreadyDone: current >= targetCGPA }
+            }
+
+            const projectedTotalGradedCredits = currentGradedCredits + remainingCredits
+            const targetTotalPoints = targetCGPA * projectedTotalGradedCredits
+            const neededPoints = targetTotalPoints - currentPoints
             const neededGPA = neededPoints / remainingCredits
 
             if (neededGPA > 10.001) return { achievable: false, gpa: neededGPA }
@@ -603,7 +652,7 @@ export default function GradesPage() {
             requiredForTarget,
             gradeBreakdown,
         }
-    }, [cgpa, totalCredits, programCredits])
+    }, [cgpa, totalCredits, programCredits, courses])
 
     const getGPAColor = (gpa: number) => {
         if (gpa >= 9.0) return 'text-purple-400'
@@ -620,7 +669,7 @@ export default function GradesPage() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-[400px]">
+            <div className="flex items-center justify-center min-h-100">
                 <Loader2 className="h-8 w-8 text-violet-500 animate-spin" />
             </div>
         )
@@ -751,10 +800,10 @@ export default function GradesPage() {
 
             {/* CGPA Card */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="glass-card border-white/[0.06] md:col-span-2">
+                <Card className="glass-card border-white/6 md:col-span-2">
                     <CardContent className="p-6">
                         <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 text-center sm:text-left">
-                            <div className="p-4 rounded-2xl bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20">
+                            <div className="p-4 rounded-2xl bg-linear-to-br from-violet-500/20 to-fuchsia-500/20">
                                 <GraduationCap className="h-10 w-10 text-violet-400" />
                             </div>
                             <div>
@@ -772,7 +821,7 @@ export default function GradesPage() {
                         <div className="mt-6">
                             <div className="h-3 bg-white/5 rounded-full overflow-hidden">
                                 <div
-                                    className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full transition-all duration-500"
+                                    className="h-full bg-linear-to-r from-violet-500 to-fuchsia-500 rounded-full transition-all duration-500"
                                     style={{ width: `${(parseFloat(cgpa) / 10) * 100}%` }}
                                 />
                             </div>
@@ -780,7 +829,7 @@ export default function GradesPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="glass-card border-white/[0.06]">
+                <Card className="glass-card border-white/6">
                     <CardContent className="p-6 flex flex-col justify-center h-full">
                         <div className="text-center">
                             <BookOpen className="h-8 w-8 text-cyan-400 mx-auto mb-3" />
@@ -793,7 +842,7 @@ export default function GradesPage() {
 
             {/* CGPA Future Planner */}
             {totalCredits > 0 && cgpaAnalysis.remainingCredits > 0 && (
-                <Card className="glass-card border-purple-500/20 bg-gradient-to-r from-purple-500/5 to-pink-500/5">
+                <Card className="glass-card border-purple-500/20 bg-linear-to-r from-purple-500/5 to-pink-500/5">
                     <CardHeader className="pb-3">
                         <CardTitle className="text-lg text-foreground flex items-center gap-2 flex-wrap">
                             <TrendingUp className="h-5 w-5 text-purple-400" />
@@ -889,7 +938,7 @@ export default function GradesPage() {
             <Card className="glass-card border-cyan-500/20">
                 <Collapsible open={showCurriculum} onOpenChange={setShowCurriculum}>
                     <CollapsibleTrigger asChild>
-                        <CardHeader className="pb-3 cursor-pointer hover:bg-white/[0.02] transition-colors">
+                        <CardHeader className="pb-3 cursor-pointer hover:bg-white/2 transition-colors">
                             <CardTitle className="text-lg text-foreground flex items-center gap-2">
                                 {showCurriculum ? <ChevronDown className="h-5 w-5 text-cyan-400" /> : <ChevronUp className="h-5 w-5 text-cyan-400" />}
                                 <BookOpen className="h-5 w-5 text-cyan-400" />
@@ -908,7 +957,7 @@ export default function GradesPage() {
                             </p>
                             <div className="space-y-2">
                                 {/* Header */}
-                                <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs text-gray-500 uppercase bg-white/[0.02] rounded-lg">
+                                <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs text-gray-500 uppercase bg-white/2 rounded-lg">
                                     <div className="col-span-6">Category</div>
                                     <div className="col-span-2 text-center">Required</div>
                                     <div className="col-span-2 text-center">Earned</div>
@@ -924,7 +973,7 @@ export default function GradesPage() {
                                     const isComplete = earnedCredits >= cat.required
 
                                     return (
-                                        <div key={cat.id} className="grid grid-cols-12 gap-2 px-3 py-2.5 rounded-lg hover:bg-white/[0.02] transition-colors items-center">
+                                        <div key={cat.id} className="grid grid-cols-12 gap-2 px-3 py-2.5 rounded-lg hover:bg-white/2 transition-colors items-center">
                                             <div className="col-span-6 text-sm text-foreground truncate" title={cat.name}>
                                                 {cat.name}
                                             </div>
@@ -991,7 +1040,7 @@ export default function GradesPage() {
                 <Card className="glass-card border-amber-500/20">
                     <Collapsible open={showImprovementAdvisor} onOpenChange={setShowImprovementAdvisor}>
                         <CollapsibleTrigger asChild>
-                            <CardHeader className="pb-3 cursor-pointer hover:bg-white/[0.02] transition-colors">
+                            <CardHeader className="pb-3 cursor-pointer hover:bg-white/2 transition-colors">
                                 <CardTitle className="text-lg text-foreground flex items-center gap-2">
                                     {showImprovementAdvisor ? <ChevronDown className="h-5 w-5 text-amber-400" /> : <ChevronUp className="h-5 w-5 text-amber-400" />}
                                     <TrendingUp className="h-5 w-5 text-amber-400" />
@@ -1005,17 +1054,7 @@ export default function GradesPage() {
                         <CollapsibleContent>
                             <CardContent className="pt-0 space-y-6">
                                 {/* Controls */}
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-sm text-muted-foreground">Improvement slots:</span>
-                                        <Input
-                                            type="number"
-                                            value={improvementLimit}
-                                            onChange={(e) => setImprovementLimit(Math.max(1, parseInt(e.target.value) || 1))}
-                                            className="w-16 h-9 text-sm text-center bg-background border-border"
-                                            min={1}
-                                        />
-                                    </div>
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl bg-white/2 border border-white/5">
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -1026,66 +1065,132 @@ export default function GradesPage() {
                                         {loadingDifficulties ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                                         AI Difficulty Analysis
                                     </Button>
-                                </div>
-
-                                {/* Top Recommendations */}
-                                <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20">
-                                    <h4 className="text-sm font-medium text-amber-400 mb-3 flex items-center gap-2">
-                                        🎯 Top {improvementLimit} Recommendations
-                                    </h4>
-                                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                        {improvementCandidates.slice(0, improvementLimit).map((candidate, i) => (
-                                            <div
-                                                key={candidate.course.id}
-                                                className="flex items-center gap-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20"
-                                            >
-                                                <span className="text-lg font-bold text-amber-400">#{i + 1}</span>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-sm font-medium text-foreground truncate">{candidate.course.name}</p>
-                                                    <p className="text-xs text-amber-300">Max boost: +{candidate.maxBoost.toFixed(3)} CGPA</p>
-                                                </div>
-                                            </div>
-                                        ))}
+                                    <div className="text-xs text-muted-foreground ml-auto">
+                                        Select courses below to add them to your plan.
                                     </div>
                                 </div>
 
-                                {/* All Courses */}
-                                <div className="space-y-3">
-                                    <h4 className="text-sm font-medium text-muted-foreground px-1">All Improvable Courses</h4>
-                                    <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                                        {improvementCandidates.map((candidate, idx) => {
-                                            const isTopPick = idx < improvementLimit
-                                            return (
-                                                <div
-                                                    key={candidate.course.id}
-                                                    className={cn(
-                                                        "p-4 rounded-xl transition-colors",
-                                                        isTopPick
-                                                            ? "bg-amber-500/5 border-2 border-amber-500/30"
-                                                            : "bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04]"
-                                                    )}
-                                                >
-                                                    {/* Course Header */}
-                                                    <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-                                                        <div className="flex items-center gap-3">
-                                                            {isTopPick && (
-                                                                <span className="flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 text-sm font-bold">
-                                                                    {idx + 1}
-                                                                </span>
-                                                            )}
-                                                            <div>
-                                                                <h5 className="font-medium text-foreground">{candidate.course.name}</h5>
-                                                                <div className="flex items-center gap-2 mt-0.5">
-                                                                    <span className="text-xs text-muted-foreground">{candidate.course.credits} credits</span>
-                                                                    <span className="text-xs text-muted-foreground">•</span>
+                                {/* Your Improvement Plan (Selected Courses) */}
+                                <div className="p-4 rounded-xl bg-linear-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                                        <h4 className="text-sm font-medium text-amber-400 flex items-center gap-2">
+                                            🎯 Your Improvement Plan
+                                            <span className="text-xs text-amber-400/70 font-normal">({selectedImprovementIds.length})</span>
+                                        </h4>
+                                        {selectedImprovementIds.length > 0 && (
+                                            <div className="flex items-center gap-2 text-xs text-amber-300/90 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
+                                                <span>Potential:</span>
+                                                <span className="font-bold text-amber-400 text-sm">
+                                                    {(parseFloat(cgpa) + improvementCandidates
+                                                        .filter(c => selectedImprovementIds.includes(c.course.id))
+                                                        .reduce((sum, c) => sum + c.maxBoost, 0)
+                                                    ).toFixed(2)} CGPA
+                                                </span>
+                                                <span className="text-[10px] text-green-400 font-medium">
+                                                    (+{improvementCandidates
+                                                        .filter(c => selectedImprovementIds.includes(c.course.id))
+                                                        .reduce((sum, c) => sum + c.maxBoost, 0)
+                                                        .toFixed(3)})
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {selectedImprovementIds.length === 0 ? (
+                                        <div className="text-center py-8 border-2 border-dashed border-amber-500/20 rounded-lg">
+                                            <p className="text-sm text-muted-foreground">No courses selected.</p>
+                                            <p className="text-xs text-muted-foreground mt-1">Add courses from the list below to build your plan.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                            {improvementCandidates
+                                                .filter(c => selectedImprovementIds.includes(c.course.id))
+                                                .map((candidate, i) => (
+                                                    <div
+                                                        key={candidate.course.id}
+                                                        className="relative flex flex-col gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20"
+                                                    >
+                                                        <div className="flex justify-between items-start gap-2">
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-sm font-medium text-foreground truncate">{candidate.course.name}</p>
+                                                                <div className="flex items-center gap-2 mt-1">
                                                                     <span className={cn("text-xs font-semibold", gradeColors[candidate.course.grade])}>
-                                                                        Current: {candidate.course.grade}
+                                                                        Currently: {candidate.course.grade}
                                                                     </span>
+                                                                    <span className="text-xs text-muted-foreground">•</span>
+                                                                    <span className="text-xs text-amber-300">+{candidate.maxBoost.toFixed(3)} Boost</span>
                                                                 </div>
                                                             </div>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-6 w-6 text-muted-foreground hover:text-red-400 -mr-1 -mt-1"
+                                                                onClick={() => setSelectedImprovementIds(prev => prev.filter(id => id !== candidate.course.id))}
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </Button>
                                                         </div>
+
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Goal</span>
+                                                            <Select
+                                                                value={getTarget(candidate.course.id)}
+                                                                onValueChange={(val) => setCourseTargetGrades(prev => ({ ...prev, [candidate.course.id]: val }))}
+                                                            >
+                                                                <SelectTrigger className="h-7 text-xs bg-black/20 border-white/10 w-full">
+                                                                    <SelectValue />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {['S', 'A', 'B', 'C', 'D'].map(g => (
+                                                                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Available Courses */}
+                                <div className="space-y-3">
+                                    <h4 className="text-sm font-medium text-muted-foreground px-1">Available for Improvement</h4>
+                                    <div className="space-y-3 max-h-100 overflow-y-auto pr-1">
+                                        {improvementCandidates
+                                            .filter(c => !selectedImprovementIds.includes(c.course.id))
+                                            .map((candidate) => (
+                                                <div
+                                                    key={candidate.course.id}
+                                                    className="group flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3 rounded-lg border border-border bg-card/50 hover:bg-accent/50 transition-colors"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            className="h-8 w-8 text-green-400 hover:text-green-300 hover:bg-green-500/20"
+                                                            onClick={() => setSelectedImprovementIds(prev => [...prev, candidate.course.id])}
+                                                        >
+                                                            <Plus className="h-4 w-4" />
+                                                        </Button>
+                                                        <div>
+                                                            <h5 className="font-medium text-foreground">{candidate.course.name}</h5>
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                <span className="text-xs text-muted-foreground">{candidate.course.credits} credits</span>
+                                                                <span className="text-xs text-muted-foreground">•</span>
+                                                                <span className={cn("text-xs font-semibold", gradeColors[candidate.course.grade])}>
+                                                                    Current: {candidate.course.grade}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 pl-11 sm:pl-0">
+                                                        <span className="text-xs text-muted-foreground">
+                                                            Max potential: <span className="text-amber-400">+{candidate.maxBoost.toFixed(3)}</span> (to {getTarget(candidate.course.id)})
+                                                        </span>
                                                         <span className={cn(
-                                                            "px-3 py-1 rounded-full text-xs font-medium",
+                                                            "px-2 py-0.5 rounded-full text-[10px] font-medium ml-2",
                                                             candidate.difficulty === 'Easy' && "bg-green-500/20 text-green-400",
                                                             candidate.difficulty === 'Medium' && "bg-blue-500/20 text-blue-400",
                                                             candidate.difficulty === 'Hard' && "bg-orange-500/20 text-orange-400",
@@ -1095,47 +1200,19 @@ export default function GradesPage() {
                                                             {candidate.difficulty}
                                                         </span>
                                                     </div>
-
-                                                    {/* Upgrade Options */}
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {candidate.upgrades.map(upgrade => (
-                                                            <div
-                                                                key={upgrade.targetGrade}
-                                                                className={cn(
-                                                                    "flex items-center gap-2 px-3 py-1.5 rounded-lg",
-                                                                    upgrade.targetGrade === 'S' && "bg-purple-500/15 border border-purple-500/30",
-                                                                    upgrade.targetGrade === 'A' && "bg-emerald-500/15 border border-emerald-500/30",
-                                                                    upgrade.targetGrade === 'B' && "bg-green-500/15 border border-green-500/30",
-                                                                    upgrade.targetGrade === 'C' && "bg-blue-500/15 border border-blue-500/30",
-                                                                    upgrade.targetGrade === 'D' && "bg-amber-500/15 border border-amber-500/30"
-                                                                )}
-                                                            >
-                                                                <span className={cn(
-                                                                    "text-sm font-bold",
-                                                                    upgrade.targetGrade === 'S' && "text-purple-400",
-                                                                    upgrade.targetGrade === 'A' && "text-emerald-400",
-                                                                    upgrade.targetGrade === 'B' && "text-green-400",
-                                                                    upgrade.targetGrade === 'C' && "text-blue-400",
-                                                                    upgrade.targetGrade === 'D' && "text-amber-400"
-                                                                )}>
-                                                                    {upgrade.targetGrade}
-                                                                </span>
-                                                                <span className="text-xs text-muted-foreground">
-                                                                    +{upgrade.cgpaBoost}
-                                                                </span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
                                                 </div>
-                                            )
-                                        })}
+                                            ))}
+                                        {improvementCandidates.filter(c => !selectedImprovementIds.includes(c.course.id)).length === 0 && (
+                                            <p className="text-sm text-muted-foreground text-center py-4">All improvable courses selected.</p>
+                                        )}
                                     </div>
                                 </div>
                             </CardContent>
                         </CollapsibleContent>
                     </Collapsible>
-                </Card>
-            )}
+                </Card >
+            )
+            }
 
             {/* Add Course Dialog is at the bottom */}
 
@@ -1205,7 +1282,7 @@ export default function GradesPage() {
                                 <div className="space-y-1 p-2">
                                     {/* Header */}
                                     {/* Header - Hidden on Mobile */}
-                                    <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-xs text-gray-500 uppercase rounded-t-lg bg-white/[0.01]">
+                                    <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-xs text-gray-500 uppercase rounded-t-lg bg-white/1">
                                         <div className="col-span-6">Course</div>
                                         <div className="col-span-2 text-center">Credits</div>
                                         <div className="col-span-2 text-center">Grade</div>
@@ -1215,7 +1292,7 @@ export default function GradesPage() {
                                     {semCourses.map((course) => (
                                         <div
                                             key={course.id}
-                                            className="px-4 py-3 rounded-lg hover:bg-white/[0.04] transition-colors group"
+                                            className="px-4 py-3 rounded-lg hover:bg-white/4 transition-colors group"
                                         >
                                             {/* Mobile Row */}
                                             <div className="flex md:hidden items-center justify-between gap-3">
@@ -1299,7 +1376,7 @@ export default function GradesPage() {
             </div>
 
             {/* GPA Scale Reference */}
-            <Card className="glass-card border-white/[0.06]">
+            <Card className="glass-card border-white/6">
                 <CardHeader>
                     <CardTitle className="text-sm text-gray-400">GPA Scale Reference</CardTitle>
                 </CardHeader>
@@ -1541,6 +1618,6 @@ export default function GradesPage() {
                     </div>
                 </DialogContent>
             </Dialog>
-        </div>
+        </div >
     )
 }

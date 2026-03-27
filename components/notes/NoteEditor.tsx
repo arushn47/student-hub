@@ -5,7 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import Placeholder from '@tiptap/extension-placeholder'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -63,6 +63,8 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
     const router = useRouter()
     const supabase = createClient()
 
+    const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
     const editor = useEditor({
         extensions: [
             StarterKit,
@@ -77,7 +79,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
         content: note.content || '',
         editorProps: {
             attributes: {
-                class: 'prose prose-invert max-w-none focus:outline-none focus-visible:outline-none focus:ring-0 min-h-[50vh] px-1 py-2',
+                class: 'prose prose-sm prose-invert max-w-none focus:outline-none focus-visible:outline-none focus:ring-0 min-h-[50vh] px-1 py-2 [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>h1]:mt-4 [&>h1]:mb-2 [&>h2]:mt-3 [&>h2]:mb-1',
             },
         },
         immediatelyRender: false,
@@ -113,13 +115,22 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
 
     // Auto-save on content/title change (debounced 2s)
     useEffect(() => {
-        const timeoutId = setTimeout(() => {
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current)
+        }
+
+        saveTimeoutRef.current = setTimeout(() => {
             if (note.content !== currentContent || note.title !== title) {
                 saveNote()
             }
         }, 2000)
 
-        return () => clearTimeout(timeoutId)
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current)
+                saveTimeoutRef.current = null
+            }
+        }
     }, [currentContent, title, saveNote, note.content, note.title])
 
     // Manual Save Shortcut (Ctrl+S)
@@ -152,7 +163,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
             const response = await fetch('/api/ai/explain', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: selectedText }),
+                body: JSON.stringify({ text: selectedText, noteId: note.id }),
             })
 
             if (!response.ok) throw new Error('Failed to get explanation')
@@ -182,7 +193,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
             const response = await fetch('/api/ai/quiz', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content }),
+                body: JSON.stringify({ content, noteId: note.id }),
             })
 
             if (!response.ok) throw new Error('Failed to generate quiz')
@@ -216,6 +227,34 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
         (a, i) => a === quizDialog.questions[i]?.correctAnswer
     ).length
 
+    const handleBack = async () => {
+        // If the user navigates away before the debounce fires, changes (like task checkbox toggles)
+        // can be lost. Flush any pending debounce and persist immediately.
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current)
+            saveTimeoutRef.current = null
+        }
+
+        // Auto-delete if it's completely empty and still default title
+        const isDefaultTitle = title === 'Untitled Note' || title.trim() === ''
+        const isEmptyContent = !currentContent || currentContent === '<p></p>' || currentContent.trim() === ''
+
+        if (isDefaultTitle && isEmptyContent) {
+            try {
+                const supabase = createClient()
+                await supabase.from('notes').delete().eq('id', note.id)
+            } catch (error) {
+                console.error('Failed to auto-delete empty note:', error)
+            }
+        } else {
+            if (note.content !== currentContent || note.title !== title) {
+                await saveNote()
+            }
+        }
+
+        router.push('/dashboard/notes')
+    }
+
     return (
         <div className="max-w-3xl mx-auto flex flex-col h-[calc(100vh-8rem)]">
             {/* Top Bar - Minimal */}
@@ -223,7 +262,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
                 <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => router.push('/dashboard/notes')}
+                    onClick={handleBack}
                     className="text-gray-400 hover:text-white hover:bg-white/10"
                 >
                     <ArrowLeft className="h-5 w-5" />
@@ -237,7 +276,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
             </div>
 
             {/* Note Content Area */}
-            <div className="flex-1 overflow-y-auto rounded-xl bg-white/[0.02] border border-white/10 p-4 mb-4">
+            <div className="flex-1 overflow-y-auto rounded-xl bg-white/2 border border-white/10 p-4 mb-4">
                 {/* Title Input */}
                 <Input
                     value={title}
@@ -356,24 +395,24 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
 
             {/* Explain Dialog */}
             <Dialog open={explainDialog.open} onOpenChange={(open) => setExplainDialog((prev) => ({ ...prev, open }))}>
-                <DialogContent className="bg-gray-900 border-white/10 max-w-lg">
+                <DialogContent className="bg-gray-900 border-white/10 max-w-lg max-h-[90vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle className="text-white flex items-center gap-2">
                             <HelpCircle className="h-5 w-5 text-purple-400" />
                             Explanation
                         </DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4">
+                    <div className="space-y-4 overflow-y-auto flex-1 min-h-0">
                         <div className="p-3 rounded-lg bg-white/5 border border-white/10">
                             <p className="text-sm text-gray-400 mb-1">Selected text:</p>
-                            <p className="text-white">&quot;{explainDialog.text}&quot;</p>
+                            <p className="text-white text-sm line-clamp-3">&quot;{explainDialog.text}&quot;</p>
                         </div>
                         {explainLoading ? (
                             <div className="flex items-center justify-center py-8">
                                 <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
                             </div>
                         ) : (
-                            <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/20 max-h-[60vh] overflow-y-auto prose prose-invert prose-sm max-w-none">
+                            <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/20 overflow-y-auto prose prose-invert prose-sm max-w-none">
                                 <ReactMarkdown>
                                     {explainDialog.explanation}
                                 </ReactMarkdown>
@@ -417,7 +456,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
                             </div>
                             {currentAnswer !== null && currentQuestion.explanation && (
                                 <p className="text-sm text-gray-400 p-3 rounded-lg bg-white/5">
-                                    💡 {currentQuestion.explanation}
+                                    {currentQuestion.explanation}
                                 </p>
                             )}
                             <div className="flex justify-between pt-2">
@@ -433,7 +472,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
                                     <Button
                                         onClick={() => setQuizDialog((prev) => ({ ...prev, currentIndex: prev.currentIndex + 1 }))}
                                         disabled={currentAnswer === null}
-                                        className="bg-gradient-to-r from-purple-500 to-pink-500"
+                                        className="bg-linear-to-r from-purple-500 to-pink-500"
                                     >
                                         Next
                                     </Button>
@@ -443,7 +482,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
                                             Score: {correctCount}/{quizDialog.questions.length}
                                         </p>
                                         <p className="text-sm text-gray-400">
-                                            {correctCount === quizDialog.questions.length ? '🎉 Perfect!' : 'Keep practicing!'}
+                                            {correctCount === quizDialog.questions.length ? 'Perfect!' : 'Keep practicing!'}
                                         </p>
                                     </div>
                                 ) : null}

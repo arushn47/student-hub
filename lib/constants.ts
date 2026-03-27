@@ -37,6 +37,14 @@ export const SUBJECTS = [
     "Other"
 ]
 
+// VIT-only colleges for question papers restriction (frontend-only for now)
+export const VIT_COLLEGES = [
+    "VIT Vellore",
+    "VIT Chennai",
+    "VIT Bhopal",
+    "VIT AP"
+]
+
 export const EXAM_TYPES = [
     "Mid Term 1 / CAT 1",
     "Mid Term 2 / CAT 2",

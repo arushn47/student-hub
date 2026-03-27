@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateText } from '@/lib/gemini'
 import { Part } from '@google/generative-ai'
+import { checkRateLimit, rateLimitExceededResponse, rateLimitHeaders, RATE_LIMITS } from '@/lib/rate-limit'
 
 function normalizeStoragePath(path: string): string {
     const trimmed = (path || '').trim()
@@ -26,6 +27,20 @@ export async function POST(request: Request) {
 
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        const rl = await checkRateLimit(
+            user.id,
+            RATE_LIMITS.exam_prep.endpoint,
+            RATE_LIMITS.exam_prep.limit,
+            RATE_LIMITS.exam_prep.windowSeconds
+        )
+        if (!rl.allowed) {
+            return rateLimitExceededResponse({
+                limit: RATE_LIMITS.exam_prep.limit,
+                remaining: rl.remaining,
+                resetAt: rl.resetAt,
+            })
         }
 
         const body = await request.json()
@@ -86,7 +101,18 @@ export async function POST(request: Request) {
             throw updateError
         }
 
-        return NextResponse.json({ success: true, important_topics: extractedText })
+        return NextResponse.json(
+            { success: true, important_topics: extractedText },
+            {
+                headers: {
+                    ...rateLimitHeaders({
+                        limit: RATE_LIMITS.exam_prep.limit,
+                        remaining: rl.remaining,
+                        resetAt: rl.resetAt,
+                    }),
+                },
+            }
+        )
 
     } catch (error) {
         console.error('Syllabus analysis error:', error)

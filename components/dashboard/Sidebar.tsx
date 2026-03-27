@@ -31,13 +31,23 @@ import {
     GraduationCap,
     Wallet,
     FolderOpen,
-    Sparkles,
     Bell,
     ClipboardList,
     Quote,
-    UserCheck
+    UserCheck,
+    Shield,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/auth-context'
+import { useFeatureFlags } from '@/hooks/useFeatureFlags'
+
+interface NavItem {
+    href: string
+    label: string
+    icon: React.ComponentType<{ className?: string }>
+    color: string
+    featureFlag?: string
+}
 
 interface SidebarProps {
     user: {
@@ -49,7 +59,7 @@ interface SidebarProps {
     } | null
 }
 
-const navGroups = [
+const navGroups: { title: string | null; items: NavItem[] }[] = [
     {
         title: null, // "Overview" implied
         items: [
@@ -59,34 +69,34 @@ const navGroups = [
     {
         title: 'Academics',
         items: [
-            { href: '/dashboard/exam-prep', label: 'Exam Prep', icon: Target, color: 'amber' },
-            { href: '/dashboard/tasks', label: 'Tasks', icon: CheckSquare, color: 'emerald' },
-            { href: '/dashboard/notes', label: 'Notes', icon: FileText, color: 'blue' },
-            { href: '/dashboard/assignments', label: 'Assignments', icon: ClipboardList, color: 'indigo' },
-            { href: '/dashboard/grades', label: 'Grades', icon: GraduationCap, color: 'pink' },
-            { href: '/dashboard/papers', label: 'Question Papers', icon: FolderOpen, color: 'orange' },
+            { href: '/dashboard/exam-prep', label: 'Exam Prep', icon: Target, color: 'amber', featureFlag: 'exam_prep' },
+            { href: '/dashboard/tasks', label: 'Tasks', icon: CheckSquare, color: 'emerald', featureFlag: 'tasks' },
+            { href: '/dashboard/notes', label: 'Notes', icon: FileText, color: 'blue', featureFlag: 'notes' },
+            { href: '/dashboard/assignments', label: 'Assignments', icon: ClipboardList, color: 'indigo', featureFlag: 'assignments' },
+            { href: '/dashboard/grades', label: 'Grades', icon: GraduationCap, color: 'pink', featureFlag: 'grades' },
+            { href: '/dashboard/papers', label: 'Question Papers', icon: FolderOpen, color: 'orange', featureFlag: 'question_papers' },
         ]
     },
     {
         title: 'Campus Life',
         items: [
-            { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, color: 'cyan' },
-            { href: '/dashboard/timetable', label: 'Timetable', icon: Clock, color: 'purple' },
-            { href: '/dashboard/attendance', label: 'Attendance', icon: UserCheck, color: 'lime' },
+            { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar, color: 'cyan', featureFlag: 'calendar' },
+            { href: '/dashboard/timetable', label: 'Timetable', icon: Clock, color: 'purple', featureFlag: 'timetable' },
+            { href: '/dashboard/attendance', label: 'Attendance', icon: UserCheck, color: 'lime', featureFlag: 'attendance' },
         ]
     },
     {
         title: 'Tools',
         items: [
-            { href: '/dashboard/pomodoro', label: 'Focus Timer', icon: Timer, color: 'rose' },
-            { href: '/dashboard/reminders', label: 'Reminders', icon: Bell, color: 'yellow' },
-            { href: '/dashboard/budget', label: 'Budget', icon: Wallet, color: 'green' },
+            { href: '/dashboard/pomodoro', label: 'Focus Timer', icon: Timer, color: 'rose', featureFlag: 'pomodoro' },
+            { href: '/dashboard/reminders', label: 'Reminders', icon: Bell, color: 'yellow', featureFlag: 'reminders' },
+            { href: '/dashboard/budget', label: 'Budget', icon: Wallet, color: 'green', featureFlag: 'budget' },
         ]
     },
     {
         title: 'System',
         items: [
-            { href: '/dashboard/settings/semesters', label: 'Semesters', icon: GraduationCap, color: 'fuchsia' },
+            { href: '/dashboard/settings/semesters', label: 'Semesters', icon: GraduationCap, color: 'fuchsia', featureFlag: 'semesters' },
             { href: '/dashboard/settings', label: 'Settings', icon: Settings, color: 'slate' },
         ]
     }
@@ -109,6 +119,7 @@ const iconColors: Record<string, string> = {
     indigo: 'group-hover:text-indigo-400',
     teal: 'group-hover:text-teal-400',
     fuchsia: 'group-hover:text-fuchsia-400',
+    red: 'group-hover:text-red-400',
 }
 
 const activeColors: Record<string, string> = {
@@ -128,6 +139,7 @@ const activeColors: Record<string, string> = {
     indigo: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/30',
     teal: 'text-teal-400 bg-teal-500/10 border-teal-500/30',
     fuchsia: 'text-fuchsia-400 bg-fuchsia-500/10 border-fuchsia-500/30',
+    red: 'text-red-400 bg-red-500/10 border-red-500/30',
 }
 
 import NProgress from 'nprogress'
@@ -183,7 +195,7 @@ function NavItem({
                     {/* Hydration fix: Only render icon after mount to ensure match with server (which renders placeholder) */}
                     {mounted ? (
                         <Icon className={cn(
-                            "h-4 w-4 aspect-square flex-shrink-0 transition-colors",
+                            "h-4 w-4 aspect-square shrink-0 transition-colors",
                             isActive ? '' : iconColors[color]
                         )} />
                     ) : (
@@ -211,12 +223,33 @@ export function Sidebar({ user }: SidebarProps) {
     const pathname = usePathname()
     const router = useRouter()
     const supabase = createClient()
+    const { isAdmin } = useAuth()
+    const { isEnabled: isFeatureEnabled } = useFeatureFlags()
 
     const handleLogout = async () => {
         await supabase.auth.signOut()
         router.push('/login')
         router.refresh()
     }
+
+    // Filter nav items by feature flags (admins bypass)
+    const filterByFlags = (items: NavItem[]) =>
+        items.filter(item => {
+            if (!item.featureFlag) return true
+            if (isAdmin) return true
+            return isFeatureEnabled(item.featureFlag)
+        })
+
+    // Build nav groups, conditionally including admin
+    const allNavGroups = [
+        ...navGroups.map(g => ({ ...g, items: filterByFlags(g.items) })).filter(g => g.items.length > 0),
+        ...(isAdmin ? [{
+            title: 'Admin' as string | null,
+            items: [
+                { href: '/dashboard/admin', label: 'Admin Panel', icon: Shield, color: 'red' } as NavItem,
+            ]
+        }] : [])
+    ]
 
     const userInitials = user?.user_metadata?.full_name
         ?.split(' ')
@@ -228,7 +261,7 @@ export function Sidebar({ user }: SidebarProps) {
         <aside
             className={cn(
                 "h-screen flex flex-col bg-sidebar backdrop-blur-2xl border-r border-sidebar-border transition-all duration-300",
-                collapsed ? "w-[72px]" : "w-64"
+                collapsed ? "w-18" : "w-64"
             )}
         >
             {/* Toggle Button - Absolute Positioned */}
@@ -246,12 +279,12 @@ export function Sidebar({ user }: SidebarProps) {
 
             {/* Header */}
             <div className={cn(
-                "flex items-center p-4 border-b border-sidebar-border h-[65px]",
+                "flex items-center p-4 border-b border-sidebar-border h-16.25",
                 collapsed ? "justify-center" : "justify-between"
             )}>
                 <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden hover:opacity-80 transition-opacity">
                     <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center shrink-0">
-                        <Sparkles className="h-4 w-4 text-white" />
+                        <GraduationCap className="h-4 w-4 text-black" />
                     </div>
                     {!collapsed && (
                         <h1 className="text-xl font-bold gradient-text whitespace-nowrap opacity-100 transition-opacity duration-300">
@@ -263,7 +296,7 @@ export function Sidebar({ user }: SidebarProps) {
 
             {/* Navigation */}
             <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                {navGroups.map((group, i) => (
+                {allNavGroups.map((group, i) => (
                     <div key={i} className="space-y-1">
                         {!collapsed && group.title && (
                             <h4 className="px-3 text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider mb-2">
@@ -296,13 +329,13 @@ export function Sidebar({ user }: SidebarProps) {
                             <Button
                                 variant="ghost"
                                 className={cn(
-                                    "w-full justify-start gap-3 px-3 py-6 hover:bg-white/[0.06] rounded-xl transition-all",
+                                    "w-full justify-start gap-3 px-3 py-6 hover:bg-white/6 rounded-xl transition-all",
                                     collapsed && "justify-center px-0"
                                 )}
                             >
                                 <Avatar className="h-9 w-9 ring-2 ring-violet-500/20">
                                     <AvatarImage src={user.user_metadata?.avatar_url} />
-                                    <AvatarFallback className="bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white font-medium">
+                                    <AvatarFallback className="bg-linear-to-br from-violet-500 to-fuchsia-500 text-black font-medium">
                                         {userInitials}
                                     </AvatarFallback>
                                 </Avatar>
@@ -338,7 +371,7 @@ export function Sidebar({ user }: SidebarProps) {
                     <Link href="/login">
                         <Button
                             className={cn(
-                                "w-full justify-start gap-3 px-3 py-6 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl transition-all",
+                                "w-full justify-start gap-3 px-3 py-6 bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl transition-all",
                                 collapsed && "justify-center px-0"
                             )}
                         >
@@ -357,12 +390,33 @@ export function MobileSidebar({ user }: SidebarProps) {
     const pathname = usePathname()
     const router = useRouter()
     const supabase = createClient()
+    const { isAdmin } = useAuth()
+    const { isEnabled: isFeatureEnabled } = useFeatureFlags()
 
     const handleLogout = async () => {
         await supabase.auth.signOut()
         router.push('/login')
         router.refresh()
     }
+
+    // Filter nav items by feature flags (admins bypass)
+    const filterByFlags = (items: NavItem[]) =>
+        items.filter(item => {
+            if (!item.featureFlag) return true
+            if (isAdmin) return true
+            return isFeatureEnabled(item.featureFlag)
+        })
+
+    // Build nav groups, conditionally including admin
+    const allNavGroups = [
+        ...navGroups.map(g => ({ ...g, items: filterByFlags(g.items) })).filter(g => g.items.length > 0),
+        ...(isAdmin ? [{
+            title: 'Admin' as string | null,
+            items: [
+                { href: '/dashboard/admin', label: 'Admin Panel', icon: Shield, color: 'red' } as NavItem,
+            ]
+        }] : [])
+    ]
 
     const userInitials = user?.user_metadata?.full_name
         ?.split(' ')
@@ -382,7 +436,7 @@ export function MobileSidebar({ user }: SidebarProps) {
                 <div className="p-4 border-b border-sidebar-border">
                     <Link href="/dashboard" onClick={() => setOpen(false)} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                         <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
-                            <Sparkles className="h-4 w-4 text-white" />
+                            <GraduationCap className="h-4 w-4 text-white" />
                         </div>
                         <h1 className="text-xl font-bold gradient-text">
                             StudentHub
@@ -395,7 +449,7 @@ export function MobileSidebar({ user }: SidebarProps) {
                     <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10 ring-2 ring-violet-500/20">
                             <AvatarImage src={user?.user_metadata?.avatar_url} />
-                            <AvatarFallback className="bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white font-medium">
+                            <AvatarFallback className="bg-linear-to-br from-violet-500 to-fuchsia-500 text-black font-medium">
                                 {userInitials}
                             </AvatarFallback>
                         </Avatar>
@@ -412,7 +466,7 @@ export function MobileSidebar({ user }: SidebarProps) {
 
                 {/* Navigation */}
                 <nav className="p-3 space-y-4 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                    {navGroups.map((group, i) => (
+                    {allNavGroups.map((group, i) => (
                         <div key={i} className="space-y-1">
                             {group.title && (
                                 <h4 className="px-3 text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider mb-2">
@@ -450,7 +504,7 @@ export function MobileSidebar({ user }: SidebarProps) {
                     ) : (
                         <Link href="/login" onClick={() => setOpen(false)}>
                             <Button
-                                className="w-full justify-start gap-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg"
+                                className="w-full justify-start gap-3 bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg"
                             >
                                 <LogOut className="h-5 w-5 rotate-180" />
                                 Sign In

@@ -13,9 +13,38 @@ import {
     Volume2,
     VolumeX,
     Eye,
-    EyeOff
+    EyeOff,
+    Clock,
+    Target,
+    CalendarDays
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
+
+interface PomodoroSession {
+    id: string
+    session_type: string
+    duration_minutes: number
+    started_at: string
+    ended_at: string | null
+}
+
+function isToday(dateStr: string) {
+    const d = new Date(dateStr)
+    const now = new Date()
+    return d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+}
+
+function isThisWeek(dateStr: string) {
+    const d = new Date(dateStr)
+    const now = new Date()
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - now.getDay())
+    startOfWeek.setHours(0, 0, 0, 0)
+    return d >= startOfWeek
+}
 
 type TimerMode = 'focus' | 'shortBreak' | 'longBreak'
 
@@ -68,6 +97,43 @@ export default function PomodoroPage() {
     const [soundEnabled, setSoundEnabled] = useState(true)
     const [timerHidden, setTimerHidden] = useState(false)
     const lastModeRef = useRef(mode)
+    const [sessionHistory, setSessionHistory] = useState<PomodoroSession[]>([])
+    const [statsLoading, setStatsLoading] = useState(true)
+
+    // Fetch session history on mount
+    useEffect(() => {
+        fetch('/api/pomodoro')
+            .then(res => res.ok ? res.json() : Promise.reject())
+            .then(data => setSessionHistory(data.sessions ?? []))
+            .catch(() => { /* silent */ })
+            .finally(() => setStatsLoading(false))
+    }, [])
+
+    // Save completed session to API
+    const saveSession = useCallback(async (sessionType: TimerMode) => {
+        const durationMinutes = TIMER_CONFIGS[sessionType].minutes
+        try {
+            const res = await fetch('/api/pomodoro', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_type: sessionType,
+                    duration_minutes: durationMinutes,
+                }),
+            })
+            if (!res.ok) throw new Error()
+            const { session } = await res.json()
+            setSessionHistory(prev => [session, ...prev])
+        } catch {
+            toast.error('Failed to save session')
+        }
+    }, [])
+
+    // Compute stats from history
+    const focusToday = sessionHistory.filter(s => s.session_type === 'focus' && isToday(s.started_at))
+    const focusSessionsToday = focusToday.length
+    const focusMinutesToday = focusToday.reduce((sum, s) => sum + s.duration_minutes, 0)
+    const sessionsThisWeek = sessionHistory.filter(s => s.session_type === 'focus' && isThisWeek(s.started_at)).length
 
     const config = TIMER_CONFIGS[mode]
     const totalSeconds = config.minutes * 60
@@ -98,6 +164,7 @@ export default function PomodoroPage() {
                         playSound()
                         if (mode === 'focus') {
                             setSessionsCompleted(c => c + 1)
+                            saveSession('focus')
                             const nextCount = sessionsCompleted + 1
                             const nextMode = (nextCount + 1) % 4 === 0 ? 'longBreak' : 'shortBreak'
                             setMode(nextMode)
@@ -117,7 +184,7 @@ export default function PomodoroPage() {
         return () => {
             if (interval) clearInterval(interval)
         }
-    }, [isRunning, timeLeft, mode, sessionsCompleted, playSound])
+    }, [isRunning, timeLeft, mode, sessionsCompleted, playSound, saveSession])
 
     // Reset time when mode changes manually
 
@@ -174,7 +241,7 @@ export default function PomodoroPage() {
                         className={cn(
                             "w-3 h-3 rounded-full transition-all",
                             i < (sessionsCompleted % 4)
-                                ? "bg-gradient-to-r from-rose-500 to-pink-500"
+                                ? "bg-linear-to-r from-rose-500 to-pink-500"
                                 : "bg-white/10"
                         )}
                     />
@@ -210,7 +277,7 @@ export default function PomodoroPage() {
             </div>
 
             {/* Timer Display */}
-            <Card className="glass-card border-white/[0.06] overflow-hidden">
+            <Card className="glass-card border-white/6 overflow-hidden">
                 <CardContent className="p-8 md:p-12">
                     {timerHidden ? (
                         // Hidden Timer Mode - Minimal progress bar
@@ -293,7 +360,7 @@ export default function PomodoroPage() {
                         <Button
                             onClick={toggleTimer}
                             className={cn(
-                                "h-16 w-16 rounded-full bg-gradient-to-r shadow-lg transition-all hover:scale-105",
+                                "h-16 w-16 rounded-full bg-linear-to-r shadow-lg transition-all hover:scale-105",
                                 colors.gradient
                             )}
                         >
@@ -334,8 +401,51 @@ export default function PomodoroPage() {
                 </CardContent>
             </Card>
 
+            {/* Session Stats */}
+            <Card className="glass-card border-white/6">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-gray-400">Session Stats</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {statsLoading ? (
+                        <div className="grid grid-cols-3 gap-4">
+                            {[1, 2, 3].map(i => (
+                                <div key={i} className="text-center space-y-2">
+                                    <div className="h-8 w-12 mx-auto bg-white/10 rounded animate-pulse" />
+                                    <div className="h-3 w-20 mx-auto bg-white/5 rounded animate-pulse" />
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="text-center">
+                                <div className="flex items-center justify-center gap-1.5 mb-1">
+                                    <Target className="h-4 w-4 text-rose-400" />
+                                    <span className="text-2xl font-bold text-white">{focusSessionsToday}</span>
+                                </div>
+                                <p className="text-xs text-gray-400">Sessions today</p>
+                            </div>
+                            <div className="text-center">
+                                <div className="flex items-center justify-center gap-1.5 mb-1">
+                                    <Clock className="h-4 w-4 text-emerald-400" />
+                                    <span className="text-2xl font-bold text-white">{focusMinutesToday}</span>
+                                </div>
+                                <p className="text-xs text-gray-400">Minutes today</p>
+                            </div>
+                            <div className="text-center">
+                                <div className="flex items-center justify-center gap-1.5 mb-1">
+                                    <CalendarDays className="h-4 w-4 text-cyan-400" />
+                                    <span className="text-2xl font-bold text-white">{sessionsThisWeek}</span>
+                                </div>
+                                <p className="text-xs text-gray-400">This week</p>
+                            </div>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
             {/* Tips */}
-            <Card className="glass-card border-white/[0.06]">
+            <Card className="glass-card border-white/6">
                 <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium text-gray-400">Focus Tips</CardTitle>
                 </CardHeader>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -24,13 +24,15 @@ import { format, addMinutes, addHours, addDays, isPast } from 'date-fns'
 interface Reminder {
     id: string
     title: string
-    datetime: Date
+    remind_at: string
     type: 'task' | 'event' | 'custom'
-    notified: boolean
+    is_completed: boolean
+    created_at: string
 }
 
 export default function RemindersPage() {
     const [reminders, setReminders] = useState<Reminder[]>([])
+    const [loading, setLoading] = useState(true)
     const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
         typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
     )
@@ -43,7 +45,7 @@ export default function RemindersPage() {
         type: 'custom' as const,
     })
 
-    const triggerNotification = (reminder: Reminder) => {
+    const triggerNotification = useCallback((reminder: Reminder) => {
         if (notificationPermission === 'granted') {
             new Notification('⏰ Reminder', {
                 body: reminder.title,
@@ -52,26 +54,25 @@ export default function RemindersPage() {
             })
         }
         toast.info(`Reminder: ${reminder.title}`)
-    }
+    }, [notificationPermission])
 
-    // Check notification permission on mount
-    // Check notification permission on mount
-    useEffect(() => {
-        // Load reminders from localStorage
-        const saved = localStorage.getItem('reminders')
-        if (saved) {
-            const parsed = JSON.parse(saved).map((r: Reminder & { datetime: string }) => ({
-                ...r,
-                datetime: new Date(r.datetime)
-            }))
-            setReminders(parsed)
+    // Fetch reminders from API on mount
+    const fetchReminders = useCallback(async () => {
+        try {
+            const res = await fetch('/api/reminders')
+            if (!res.ok) throw new Error('Failed to fetch')
+            const data = await res.json()
+            setReminders(data.reminders ?? [])
+        } catch {
+            toast.error('Failed to load reminders')
+        } finally {
+            setLoading(false)
         }
     }, [])
 
-    // Save reminders to localStorage whenever they change
     useEffect(() => {
-        localStorage.setItem('reminders', JSON.stringify(reminders))
-    }, [reminders])
+        fetchReminders()
+    }, [fetchReminders])
 
     // Check for due reminders every 30 seconds
     useEffect(() => {
@@ -79,10 +80,16 @@ export default function RemindersPage() {
             setReminders(prev => {
                 let hasChanges = false
                 const next = prev.map(reminder => {
-                    if (!reminder.notified && isPast(reminder.datetime)) {
+                    if (!reminder.is_completed && isPast(new Date(reminder.remind_at))) {
                         triggerNotification(reminder)
                         hasChanges = true
-                        return { ...reminder, notified: true }
+                        // Mark completed in background
+                        fetch('/api/reminders', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: reminder.id, is_completed: true }),
+                        }).catch(() => { /* silent */ })
+                        return { ...reminder, is_completed: true }
                     }
                     return reminder
                 })
@@ -91,11 +98,10 @@ export default function RemindersPage() {
         }
 
         const interval = setInterval(checkReminders, 30000)
-        checkReminders() // Check immediately
+        checkReminders()
 
         return () => clearInterval(interval)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [notificationPermission])
+    }, [triggerNotification])
 
     const requestPermission = async () => {
         if (!('Notification' in window)) {
@@ -117,9 +123,7 @@ export default function RemindersPage() {
         }
     }
 
-
-
-    const addReminder = () => {
+    const addReminder = async () => {
         if (!newReminder.title.trim()) {
             toast.error('Please enter a reminder title')
             return
@@ -156,27 +160,93 @@ export default function RemindersPage() {
                 datetime = addMinutes(now, 15)
         }
 
-        const reminder: Reminder = {
-            id: crypto.randomUUID(),
+        // Optimistic insert with temp ID
+        const tempId = crypto.randomUUID()
+        const optimistic: Reminder = {
+            id: tempId,
             title: newReminder.title,
-            datetime,
+            remind_at: datetime.toISOString(),
             type: newReminder.type,
-            notified: false,
+            is_completed: false,
+            created_at: now.toISOString(),
         }
 
-        setReminders(prev => [...prev, reminder].sort((a, b) => a.datetime.getTime() - b.datetime.getTime()))
+        setReminders(prev =>
+            [...prev, optimistic].sort((a, b) =>
+                new Date(a.remind_at).getTime() - new Date(b.remind_at).getTime()
+            )
+        )
         setNewReminder({ title: '', quickTime: '15min', customDate: '', customTime: '', type: 'custom' })
         setDialogOpen(false)
         toast.success(`Reminder set for ${format(datetime, 'MMM d, h:mm a')}`)
+
+        // Persist to DB
+        try {
+            const res = await fetch('/api/reminders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: optimistic.title,
+                    remind_at: optimistic.remind_at,
+                    type: optimistic.type,
+                }),
+            })
+            if (!res.ok) throw new Error('Failed to save')
+            const { reminder } = await res.json()
+            // Replace temp ID with real DB record
+            setReminders(prev => prev.map(r => r.id === tempId ? reminder : r))
+        } catch {
+            setReminders(prev => prev.filter(r => r.id !== tempId))
+            toast.error('Failed to save reminder')
+        }
     }
 
-    const deleteReminder = (id: string) => {
+    const deleteReminder = async (id: string) => {
+        const previous = reminders
         setReminders(prev => prev.filter(r => r.id !== id))
         toast.success('Reminder deleted')
+
+        try {
+            const res = await fetch(`/api/reminders?id=${id}`, { method: 'DELETE' })
+            if (!res.ok) throw new Error('Failed to delete')
+        } catch {
+            setReminders(previous)
+            toast.error('Failed to delete reminder')
+        }
     }
 
-    const upcomingReminders = reminders.filter(r => !r.notified && !isPast(r.datetime))
-    const pastReminders = reminders.filter(r => r.notified || isPast(r.datetime))
+    const upcomingReminders = reminders.filter(r => !r.is_completed && !isPast(new Date(r.remind_at)))
+    const pastReminders = reminders.filter(r => r.is_completed || isPast(new Date(r.remind_at)))
+
+    if (loading) {
+        return (
+            <div className="space-y-6 max-w-3xl mx-auto">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                            <Bell className="h-6 w-6 text-purple-400" />
+                            Reminders
+                        </h1>
+                        <p className="text-gray-400 text-sm mt-1">Set reminders for tasks, events, and more</p>
+                    </div>
+                </div>
+                <div className="space-y-3">
+                    <div className="h-4 w-24 bg-white/10 rounded animate-pulse" />
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="flex items-center gap-3 p-4 rounded-lg bg-white/3 border border-white/10">
+                            <div className="p-2 rounded-full bg-white/5">
+                                <div className="h-4 w-4 rounded-full bg-white/10 animate-pulse" />
+                            </div>
+                            <div className="flex-1 space-y-2">
+                                <div className="h-4 w-48 bg-white/10 rounded animate-pulse" />
+                                <div className="h-3 w-32 bg-white/5 rounded animate-pulse" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="space-y-6 max-w-3xl mx-auto">
@@ -204,7 +274,7 @@ export default function RemindersPage() {
                     )}
                     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                         <DialogTrigger asChild>
-                            <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600">
+                            <Button className="bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600">
                                 <Plus className="mr-2 h-4 w-4" />
                                 Add Reminder
                             </Button>
@@ -260,7 +330,7 @@ export default function RemindersPage() {
 
                                 <Button
                                     onClick={addReminder}
-                                    className="w-full bg-gradient-to-r from-purple-500 to-pink-500"
+                                    className="w-full bg-linear-to-r from-purple-500 to-pink-500"
                                 >
                                     Set Reminder
                                 </Button>
@@ -273,7 +343,7 @@ export default function RemindersPage() {
             {/* Notification Permission Alert */}
             {notificationPermission === 'default' && (
                 <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-center gap-3">
-                    <BellOff className="h-5 w-5 text-yellow-400 flex-shrink-0" />
+                    <BellOff className="h-5 w-5 text-yellow-400 shrink-0" />
                     <div className="flex-1">
                         <p className="text-yellow-200 text-sm">
                             Enable browser notifications to get alerted when reminders are due.
@@ -295,7 +365,7 @@ export default function RemindersPage() {
                     Upcoming ({upcomingReminders.length})
                 </h2>
                 {upcomingReminders.length === 0 ? (
-                    <div className="text-center py-8 rounded-lg bg-white/[0.02] border border-white/5">
+                    <div className="text-center py-8 rounded-lg bg-white/2 border border-white/5">
                         <Clock className="h-12 w-12 text-gray-600 mx-auto mb-3" />
                         <p className="text-gray-400">No upcoming reminders</p>
                     </div>
@@ -304,7 +374,7 @@ export default function RemindersPage() {
                         {upcomingReminders.map(reminder => (
                             <div
                                 key={reminder.id}
-                                className="flex items-center gap-3 p-4 rounded-lg bg-white/[0.03] border border-white/10 hover:border-purple-500/30 transition-colors group"
+                                className="flex items-center gap-3 p-4 rounded-lg bg-white/3 border border-white/10 hover:border-purple-500/30 transition-colors group"
                             >
                                 <div className="p-2 rounded-full bg-purple-500/10">
                                     <Bell className="h-4 w-4 text-purple-400" />
@@ -313,7 +383,7 @@ export default function RemindersPage() {
                                     <p className="text-white font-medium">{reminder.title}</p>
                                     <p className="text-sm text-gray-400 flex items-center gap-1">
                                         <Calendar className="h-3 w-3" />
-                                        {format(reminder.datetime, 'EEE, MMM d')} at {format(reminder.datetime, 'h:mm a')}
+                                        {format(new Date(reminder.remind_at), 'EEE, MMM d')} at {format(new Date(reminder.remind_at), 'h:mm a')}
                                     </p>
                                 </div>
                                 <Button
@@ -340,7 +410,7 @@ export default function RemindersPage() {
                         {pastReminders.slice(0, 5).map(reminder => (
                             <div
                                 key={reminder.id}
-                                className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/5 group"
+                                className="flex items-center gap-3 p-3 rounded-lg bg-white/2 border border-white/5 group"
                             >
                                 <div className="p-1.5 rounded-full bg-gray-500/10">
                                     <Bell className="h-3 w-3 text-gray-500" />
@@ -348,7 +418,7 @@ export default function RemindersPage() {
                                 <div className="flex-1">
                                     <p className="text-gray-400 text-sm line-through">{reminder.title}</p>
                                     <p className="text-xs text-gray-500">
-                                        {format(reminder.datetime, 'MMM d, h:mm a')}
+                                        {format(new Date(reminder.remind_at), 'MMM d, h:mm a')}
                                     </p>
                                 </div>
                                 <Button
@@ -366,7 +436,14 @@ export default function RemindersPage() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setReminders(prev => prev.filter(r => !r.notified && !isPast(r.datetime)))}
+                            onClick={async () => {
+                                const ids = pastReminders.map(r => r.id)
+                                setReminders(prev => prev.filter(r => !r.is_completed && !isPast(new Date(r.remind_at))))
+                                for (const id of ids) {
+                                    fetch(`/api/reminders?id=${id}`, { method: 'DELETE' }).catch(() => { /* silent */ })
+                                }
+                                toast.success('Cleared completed reminders')
+                            }}
                             className="text-gray-500 hover:text-red-400"
                         >
                             Clear all completed

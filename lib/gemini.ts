@@ -1,5 +1,9 @@
 import { GoogleGenerativeAI, Part } from '@google/generative-ai'
 import { jsonrepair } from 'jsonrepair'
+import { validateServerEnv } from '@/lib/env'
+import { aiLimiter } from '@/lib/ai/limiter'
+
+validateServerEnv()
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -40,9 +44,42 @@ export class GeminiRateLimitError extends Error {
     }
 }
 
+export interface GenerateTextResult {
+    text: string
+    tokensUsed: number | null
+    model: string
+}
+
+export async function generateTextWithMeta(prompt: string | (string | Part)[]): Promise<GenerateTextResult> {
+    try {
+        const result = await aiLimiter.run(() => geminiModel.generateContent(prompt))
+        return {
+            text: result.response.text(),
+            tokensUsed: result.response.usageMetadata?.totalTokenCount ?? null,
+            model: 'gemini-2.5-flash',
+        }
+    } catch (error) {
+        const classified = classifyGeminiError(error)
+        if (classified instanceof GeminiRateLimitError) {
+            try {
+                const result = await geminiFallbackModel.generateContent(prompt)
+                return {
+                    text: result.response.text(),
+                    tokensUsed: result.response.usageMetadata?.totalTokenCount ?? null,
+                    model: 'gemini-2.0-flash',
+                }
+            } catch (fallbackErr) {
+                throw classifyGeminiError(fallbackErr)
+            }
+        }
+        console.error('Gemini API Error:', error)
+        throw new Error('Failed to generate AI response. Please try again.')
+    }
+}
+
 export async function generateText(prompt: string | (string | Part)[]): Promise<string> {
     try {
-        const result = await geminiModel.generateContent(prompt)
+        const result = await aiLimiter.run(() => geminiModel.generateContent(prompt))
         return result.response.text()
     } catch (error) {
         const classified = classifyGeminiError(error)
@@ -62,7 +99,7 @@ export async function generateText(prompt: string | (string | Part)[]): Promise<
 
 export async function generateJSON<T>(prompt: string | (string | Part)[]): Promise<T> {
     try {
-        const result = await geminiJsonModel.generateContent(prompt)
+        const result = await aiLimiter.run(() => geminiJsonModel.generateContent(prompt))
         const text = result.response.text()
         // Clean up the response - remove markdown code blocks if present
         const cleanedText = text
@@ -121,22 +158,26 @@ ${clipped}`
         }
 
         console.error('Gemini API Error:', error)
-        const message = classified instanceof Error ? classified.message : 'Failed to generate AI response. Please try again.'
-        throw new Error(message)
+        // Never leak raw SDK errors to the client
+        if (classified instanceof GeminiRateLimitError) {
+            throw classified
+        }
+        throw new Error('Failed to generate AI response. Please try again.')
     }
 }
 
 function classifyGeminiError(error: unknown): Error {
     // The SDK throws an Error that may have status/statusText/errorDetails.
     const anyErr = error as { status?: number; message?: string; errorDetails?: unknown[] }
-    const message = typeof anyErr?.message === 'string' ? anyErr.message : 'Gemini request failed'
+    const rawMessage = typeof anyErr?.message === 'string' ? anyErr.message : 'Gemini request failed'
 
-    if (anyErr?.status === 429 || message.includes('429') || message.toLowerCase().includes('quota')) {
+    if (anyErr?.status === 429 || rawMessage.includes('429') || rawMessage.toLowerCase().includes('quota')) {
         const retryAfter = extractRetryAfterSeconds(anyErr?.errorDetails)
-        return new GeminiRateLimitError(message, retryAfter)
+        return new GeminiRateLimitError(rawMessage, retryAfter)
     }
 
-    return error instanceof Error ? error : new Error(message)
+    // Wrap all other errors with a safe, non-leaking message
+    return new Error('Failed to generate AI response. Please try again.')
 }
 
 function extractRetryAfterSeconds(errorDetails?: unknown[]): number | undefined {

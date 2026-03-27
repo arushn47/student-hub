@@ -5,6 +5,7 @@ import { getGoogleTokensForService } from '@/lib/google-accounts'
 import { createTaskSchema, updateTaskSchema } from '@/lib/schemas'
 import { unauthorizedResponse } from '@/lib/api-utils'
 import { validationErrorResponse, createApiErrorResponse } from '@/lib/errors'
+import { googleInsufficientScopeResponse, googleReauthResponse, isGoogleReauthError } from '@/lib/google-reauth'
 
 // GET: Fetch tasks from Google Tasks (all lists)
 export async function GET() {
@@ -67,7 +68,19 @@ export async function GET() {
 
     } catch (error: unknown) {
         console.error('Tasks fetch error:', error)
-        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch tasks';
+
+        const errorObj = error as { code?: number; message?: string }
+        const msg = errorObj.message || (error instanceof Error ? error.message : '')
+
+        if (isGoogleReauthError(error) || msg.includes('invalid_grant') || errorObj.code === 401) {
+            return googleReauthResponse('Your Google session has expired. Please reconnect your Google account in Settings to import tasks.')
+        }
+
+        if (errorObj.code === 403 || msg.toLowerCase().includes('scope')) {
+            return googleInsufficientScopeResponse('Please reconnect Google in Settings to enable Tasks access.')
+        }
+
+        const errorMessage = msg || 'Failed to fetch tasks'
         return NextResponse.json({ error: errorMessage }, { status: 500 })
     }
 }
@@ -127,6 +140,17 @@ export async function POST(req: NextRequest) {
         })
 
     } catch (error: unknown) {
+        const errorObj = error as { code?: number; message?: string }
+        const msg = errorObj.message || (error instanceof Error ? error.message : '')
+
+        if (isGoogleReauthError(error) || msg.includes('invalid_grant') || errorObj.code === 401) {
+            return googleReauthResponse('Your Google session has expired. Please reconnect your Google account in Settings to create tasks.')
+        }
+
+        if (errorObj.code === 403 || msg.toLowerCase().includes('scope')) {
+            return googleInsufficientScopeResponse('Please reconnect Google in Settings to enable Tasks access.')
+        }
+
         return createApiErrorResponse(error, 'Failed to create task')
     }
 }
@@ -156,13 +180,16 @@ export async function PATCH(req: NextRequest) {
             )
         }
 
-        const { taskId, taskListId, completed } = validation.data
+        const { taskId, taskListId, completed, title, notes, due } = validation.data
 
         const response = await tasksClient.tasks.patch({
             tasklist: taskListId,
             task: taskId,
             requestBody: {
                 status: completed ? 'completed' : 'needsAction',
+                title: title || undefined,
+                notes: notes || undefined,
+                due: due || undefined,
             },
         })
 
@@ -174,6 +201,17 @@ export async function PATCH(req: NextRequest) {
         })
 
     } catch (error: unknown) {
+        const errorObj = error as { code?: number; message?: string }
+        const msg = errorObj.message || (error instanceof Error ? error.message : '')
+
+        if (isGoogleReauthError(error) || msg.includes('invalid_grant') || errorObj.code === 401) {
+            return googleReauthResponse('Your Google session has expired. Please reconnect your Google account in Settings to update tasks.')
+        }
+
+        if (errorObj.code === 403 || msg.toLowerCase().includes('scope')) {
+            return googleInsufficientScopeResponse('Please reconnect Google in Settings to enable Tasks access.')
+        }
+
         return createApiErrorResponse(error, 'Failed to update task')
     }
 }

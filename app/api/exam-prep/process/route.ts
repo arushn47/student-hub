@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { generateJSON, GeminiRateLimitError } from '@/lib/gemini'
 import { Part } from '@google/generative-ai'
 
+import { checkRateLimit, rateLimitExceededResponse, rateLimitHeaders, RATE_LIMITS, DAILY_LIMITS } from '@/lib/rate-limit'
+
 import { extractOfficeText } from '@/lib/office-extract'
 
 // ... (code)
@@ -39,11 +41,48 @@ export async function POST(request: Request) {
 
         userId = user.id
 
+        // Daily cap check first (3 processes/day)
+        stage = 'rateLimit.exam_prep_daily'
+        const dailyRl = await checkRateLimit(
+            user.id,
+            DAILY_LIMITS.exam_prep.endpoint,
+            DAILY_LIMITS.exam_prep.limit,
+            DAILY_LIMITS.exam_prep.windowSeconds
+        )
+        if (!dailyRl.allowed) {
+            const resetDate = dailyRl.resetAt
+            const resetTime = resetDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
+            return NextResponse.json(
+                {
+                    error: `You've reached your daily limit for Exam Prep (${DAILY_LIMITS.exam_prep.limit} processes/day). Resets around ${resetTime} IST.`,
+                    resetAt: resetDate.toISOString(),
+                },
+                { status: 429, headers: rateLimitHeaders({ limit: DAILY_LIMITS.exam_prep.limit, remaining: 0, resetAt: resetDate }) }
+            )
+        }
+
+        // Per-minute burst limit
+        stage = 'rateLimit.exam_prep'
+        const rl = await checkRateLimit(
+            user.id,
+            RATE_LIMITS.exam_prep.endpoint,
+            RATE_LIMITS.exam_prep.limit,
+            RATE_LIMITS.exam_prep.windowSeconds
+        )
+        if (!rl.allowed) {
+            return rateLimitExceededResponse({
+                limit: RATE_LIMITS.exam_prep.limit,
+                remaining: rl.remaining,
+                resetAt: rl.resetAt,
+            })
+        }
+
         stage = 'request.json'
         const body = await request.json().catch(() => ({}))
         moduleId = body?.moduleId
 
         const topicOnly = typeof body?.topicOnly === 'boolean' ? body.topicOnly : false
+        const forceRegenerate = typeof body?.force === 'boolean' ? body.force : false
 
 
         if (!moduleId) {
@@ -61,6 +100,34 @@ export async function POST(request: Request) {
 
         if (moduleError || !module) {
             return NextResponse.json({ error: 'Module not found' }, { status: 404 })
+        }
+
+        // Cache check: if module already has generated content, skip Gemini
+        if (module.status === 'ready' && !forceRegenerate) {
+            stage = 'cache.check'
+            const { count: qCount } = await supabase
+                .from('exam_questions')
+                .select('id', { count: 'exact', head: true })
+                .eq('module_id', moduleId)
+            const { count: fCount } = await supabase
+                .from('exam_flashcards')
+                .select('id', { count: 'exact', head: true })
+                .eq('module_id', moduleId)
+
+            if ((qCount ?? 0) > 0 && (fCount ?? 0) > 0) {
+                return NextResponse.json(
+                    { success: true, cached: true, message: 'Content already generated. Use force=true to regenerate.' },
+                    {
+                        headers: {
+                            ...rateLimitHeaders({
+                                limit: RATE_LIMITS.exam_prep.limit,
+                                remaining: rl.remaining,
+                                resetAt: rl.resetAt,
+                            }),
+                        },
+                    }
+                )
+            }
         }
 
         const filePathsFromClient: unknown = body?.filePaths
@@ -88,8 +155,9 @@ export async function POST(request: Request) {
             filePaths = moduleFiles ? moduleFiles.map(f => f.file_path) : []
         }
 
-        // Guardrail: too many files will usually blow up context limits / timeouts.
-        const MAX_FILES_PER_PROCESS = 6
+        // Guardrail: file count and size limits to control token usage
+        const MAX_FILES_PER_PROCESS = 3
+        const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024 // 5MB per file
         if (filePaths.length > MAX_FILES_PER_PROCESS) {
             // Avoid leaving the module stuck in "processing".
             try {
@@ -256,6 +324,16 @@ export async function POST(request: Request) {
                     const buffer = await fileData.arrayBuffer()
                     const bytes = new Uint8Array(buffer)
 
+                    // File size check
+                    if (buffer.byteLength > MAX_FILE_SIZE_BYTES) {
+                        const sizeMB = (buffer.byteLength / (1024 * 1024)).toFixed(1)
+                        skippedFiles.push({
+                            filePath: normalizedPath,
+                            reason: `File too large (${sizeMB}MB). Maximum is ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB. Please compress your PDF (e.g. using ilovepdf.com).`,
+                        })
+                        continue
+                    }
+
                     // Determine file type
                     const ext = normalizedPath.split('.').pop()?.toLowerCase()
                     const isPdf = ext === 'pdf'
@@ -329,13 +407,24 @@ export async function POST(request: Request) {
         stage = 'db.update_module'
         {
             const { error: updateModuleError } = await supabase
-            .from('exam_modules')
-            .update({ status: 'ready', summary: result.summary })
-            .eq('id', moduleId)
+                .from('exam_modules')
+                .update({ status: 'ready', summary: result.summary })
+                .eq('id', moduleId)
             if (updateModuleError) throw updateModuleError
         }
 
-        return NextResponse.json({ success: true })
+        return NextResponse.json(
+            { success: true },
+            {
+                headers: {
+                    ...rateLimitHeaders({
+                        limit: RATE_LIMITS.exam_prep.limit,
+                        remaining: rl.remaining,
+                        resetAt: rl.resetAt,
+                    }),
+                },
+            }
+        )
 
 
     } catch (error) {
@@ -445,7 +534,7 @@ async function generateWithCountEnforcement(
         expectedFlashcards: number
     }
 ): Promise<GeneratedContent> {
-    const maxAttempts = 3
+    const maxAttempts = 2
     let last: GeneratedContent | null = null
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {

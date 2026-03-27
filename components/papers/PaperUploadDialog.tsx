@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { COLLEGES, SUBJECTS, EXAM_TYPES } from '@/lib/constants'
+import { VIT_COLLEGES, SUBJECTS, EXAM_TYPES } from '@/lib/constants'
 
 function SearchableSelect({
     options,
@@ -99,14 +99,12 @@ export function PaperUploadDialog({ onUploadSuccess }: { onUploadSuccess?: () =>
     const [loading, setLoading] = useState(false)
     const [file, setFile] = useState<File | null>(null)
     const [formData, setFormData] = useState({
-        college: '',
         subject: '',
         exam_type: '',
         year: new Date().getFullYear().toString()
     })
 
     // Local state for custom entries
-    const [customCollege, setCustomCollege] = useState('')
     const [customSubject, setCustomSubject] = useState('')
 
     const supabase = createClient()
@@ -117,6 +115,32 @@ export function PaperUploadDialog({ onUploadSuccess }: { onUploadSuccess?: () =>
         }
     }
 
+    // Clipboard paste support
+    const handlePaste = useCallback((e: ClipboardEvent) => {
+        if (!open) return
+        const items = e.clipboardData?.items
+        if (!items) return
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault()
+                const blob = item.getAsFile()
+                if (blob) {
+                    // Create a named file from the blob
+                    const ext = item.type.split('/')[1] || 'png'
+                    const pastedFile = new File([blob], `pasted-image.${ext}`, { type: item.type })
+                    setFile(pastedFile)
+                    toast.success('Image pasted!')
+                }
+                return
+            }
+        }
+    }, [open])
+
+    useEffect(() => {
+        document.addEventListener('paste', handlePaste)
+        return () => document.removeEventListener('paste', handlePaste)
+    }, [handlePaste])
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!file) {
@@ -125,10 +149,10 @@ export function PaperUploadDialog({ onUploadSuccess }: { onUploadSuccess?: () =>
         }
 
         // Use custom value if "Other" is selected, otherwise use dropdown value
-        const finalCollege = formData.college === 'Other' ? customCollege : formData.college
+        const finalCollege = 'VIT Bhopal'
         const finalSubject = formData.subject === 'Other' ? customSubject : formData.subject
 
-        if (!finalCollege || !finalSubject || !formData.exam_type) {
+        if (!finalSubject || !formData.exam_type) {
             toast.error('Please fill all fields')
             return
         }
@@ -180,8 +204,7 @@ export function PaperUploadDialog({ onUploadSuccess }: { onUploadSuccess?: () =>
             setOpen(false)
             setFile(null)
             // Reset form but keep catchy defaults if needed
-            setFormData({ college: '', subject: '', exam_type: '', year: new Date().getFullYear().toString() })
-            setCustomCollege('')
+            setFormData({ subject: '', exam_type: '', year: new Date().getFullYear().toString() })
             setCustomSubject('')
             onUploadSuccess?.()
 
@@ -206,25 +229,6 @@ export function PaperUploadDialog({ onUploadSuccess }: { onUploadSuccess?: () =>
                     <DialogTitle>Upload Question Paper</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-5 mt-2">
-
-                    {/* College (Full Width) */}
-                    <div className="space-y-2">
-                        <Label className="text-gray-400">College</Label>
-                        <SearchableSelect
-                            options={COLLEGES}
-                            value={formData.college}
-                            onChange={(val) => setFormData({ ...formData, college: val })}
-                            placeholder="Select College"
-                        />
-                        {formData.college === 'Other' && (
-                            <Input
-                                placeholder="Enter College Name"
-                                value={customCollege}
-                                onChange={(e) => setCustomCollege(e.target.value)}
-                                className="mt-2 bg-black/40 border-white/10 h-10 focus:border-purple-500/50"
-                            />
-                        )}
-                    </div>
 
                     {/* Subject (Full Width) */}
                     <div className="space-y-2">
@@ -307,7 +311,8 @@ export function PaperUploadDialog({ onUploadSuccess }: { onUploadSuccess?: () =>
                             ) : (
                                 <div className="flex flex-col items-center">
                                     <Upload className="h-8 w-8 text-gray-500 mb-2 group-hover:scale-110 transition-transform" />
-                                    <span className="text-sm text-gray-500">Drop file</span>
+                                    <span className="text-sm text-gray-500">Drop file or click to browse</span>
+                                    <span className="text-xs text-gray-600 mt-1">or paste an image from clipboard (Ctrl+V)</span>
                                 </div>
                             )}
                         </div>

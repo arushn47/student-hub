@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getClassroomClient, GoogleTokens, GoogleAccount } from '@/lib/google'
+import { getClassroomClient } from '@/lib/google'
+import { getGoogleTokensForService } from '@/lib/google-accounts'
 
 // GET: Fetch courses and coursework from Google Classroom
 export async function GET() {
@@ -12,30 +13,7 @@ export async function GET() {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // Try to get tokens from google_accounts first (for classroom service)
-        const { data: googleAccount } = await supabase
-            .from('google_accounts')
-            .select('*')
-            .eq('user_id', user.id)
-            .contains('services', ['classroom'])
-            .single()
-
-        let tokens: GoogleTokens | null = null
-
-        if (googleAccount) {
-            tokens = (googleAccount as GoogleAccount).tokens
-        } else {
-            // Fallback to profiles for backwards compatibility
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('google_tokens, google_connected')
-                .eq('id', user.id)
-                .single()
-
-            if (profile?.google_connected && profile?.google_tokens) {
-                tokens = profile.google_tokens as GoogleTokens
-            }
-        }
+        const { tokens } = await getGoogleTokensForService(user.id, 'classroom')
 
         if (!tokens) {
             return NextResponse.json({ error: 'No Google account connected for Classroom' }, { status: 400 })
@@ -115,17 +93,26 @@ export async function GET() {
     } catch (error: unknown) {
         console.error('Classroom fetch error:', error)
 
-        // Check for insufficient scope error
         const errorObj = error as { code?: number; message?: string }
-        if (errorObj.code === 403 || (errorObj.message && errorObj.message.includes('scope'))) {
+        const msg = errorObj.message || (error instanceof Error ? error.message : '')
+
+        // Token expired / revoked
+        if (msg.includes('invalid_grant') || errorObj.code === 401) {
+            return NextResponse.json({
+                error: 'Your Google session has expired. Please reconnect your Google account in Settings.',
+                needsReconnect: true
+            }, { status: 401 })
+        }
+
+        // Insufficient scope
+        if (errorObj.code === 403 || msg.includes('scope')) {
             return NextResponse.json({
                 error: 'Please reconnect Google in Settings to enable Classroom access',
                 needsReconnect: true
             }, { status: 403 })
         }
 
-        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch from Classroom'
-        return NextResponse.json({ error: errorMessage }, { status: 500 })
+        return NextResponse.json({ error: 'Failed to fetch from Classroom' }, { status: 500 })
     }
 }
 
@@ -139,30 +126,7 @@ export async function POST() {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // Try to get tokens from google_accounts first (for classroom service)
-        const { data: googleAccount } = await supabase
-            .from('google_accounts')
-            .select('*')
-            .eq('user_id', user.id)
-            .contains('services', ['classroom'])
-            .single()
-
-        let tokens: GoogleTokens | null = null
-
-        if (googleAccount) {
-            tokens = (googleAccount as GoogleAccount).tokens
-        } else {
-            // Fallback to profiles for backwards compatibility
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('google_tokens, google_connected')
-                .eq('id', user.id)
-                .single()
-
-            if (profile?.google_connected && profile?.google_tokens) {
-                tokens = profile.google_tokens as GoogleTokens
-            }
-        }
+        const { tokens } = await getGoogleTokensForService(user.id, 'classroom')
 
         if (!tokens) {
             return NextResponse.json({ error: 'No Google account connected for Classroom' }, { status: 400 })
@@ -230,13 +194,23 @@ export async function POST() {
                     }
 
                     // Check if already imported (by matching title + course + due date)
-                    const { data: existing } = await supabase
+                    let existingQuery = supabase
                         .from('assignments')
                         .select('id')
                         .eq('user_id', user.id)
                         .eq('title', work.title || 'Untitled')
-                        .eq('course', course.name || null)
-                        .single()
+
+                    if (course.name) {
+                        existingQuery = existingQuery.eq('course', course.name)
+                    } else {
+                        existingQuery = existingQuery.is('course', null)
+                    }
+
+                    if (dueDate) {
+                        existingQuery = existingQuery.eq('due_date', dueDate)
+                    }
+
+                    const { data: existing } = await existingQuery.maybeSingle()
 
                     if (!existing) {
                         // Insert new assignment
@@ -270,16 +244,25 @@ export async function POST() {
     } catch (error: unknown) {
         console.error('Classroom import error:', error)
 
-        // Check for insufficient scope error
         const errorObj = error as { code?: number; message?: string }
-        if (errorObj.code === 403 || (errorObj.message && errorObj.message.includes('scope'))) {
+        const msg = errorObj.message || (error instanceof Error ? error.message : '')
+
+        // Token expired / revoked
+        if (msg.includes('invalid_grant') || errorObj.code === 401) {
+            return NextResponse.json({
+                error: 'Your Google session has expired. Please reconnect your Google account in Settings.',
+                needsReconnect: true
+            }, { status: 401 })
+        }
+
+        // Insufficient scope
+        if (errorObj.code === 403 || msg.includes('scope')) {
             return NextResponse.json({
                 error: 'Please reconnect Google in Settings to enable Classroom access',
                 needsReconnect: true
             }, { status: 403 })
         }
 
-        const errorMessage = error instanceof Error ? error.message : 'Failed to import from Classroom'
-        return NextResponse.json({ error: errorMessage }, { status: 500 })
+        return NextResponse.json({ error: 'Failed to import from Classroom' }, { status: 500 })
     }
 }

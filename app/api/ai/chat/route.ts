@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { generateText } from '@/lib/gemini'
-import { getAuthenticatedUser, unauthorizedResponse, checkRateLimit, rateLimitResponse } from '@/lib/api-utils'
+import { generateTextWithMeta } from '@/lib/gemini'
+import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/api-utils'
+import { checkRateLimit, rateLimitExceededResponse, rateLimitHeaders, RATE_LIMITS } from '@/lib/rate-limit'
 import { createClient } from '@/lib/supabase/server'
 import { addMinutes, addHours, addDays } from 'date-fns'
 
@@ -90,9 +91,18 @@ export async function POST(request: Request) {
         }
 
         // Check rate limit (20 chat messages per minute)
-        const rateLimit = checkRateLimit(user.id, 'chat', 20, 60000)
-        if (!rateLimit.allowed) {
-            return rateLimitResponse(rateLimit.resetIn)
+        const rl = await checkRateLimit(
+            user.id,
+            RATE_LIMITS.chat.endpoint,
+            RATE_LIMITS.chat.limit,
+            RATE_LIMITS.chat.windowSeconds
+        )
+        if (!rl.allowed) {
+            return rateLimitExceededResponse({
+                limit: RATE_LIMITS.chat.limit,
+                remaining: rl.remaining,
+                resetAt: rl.resetAt,
+            })
         }
 
         const { messages } = await request.json()
@@ -170,7 +180,11 @@ export async function POST(request: Request) {
                     { response: action.message, action },
                     {
                         headers: {
-                            'X-RateLimit-Remaining': rateLimit.remaining.toString()
+                            ...rateLimitHeaders({
+                                limit: RATE_LIMITS.chat.limit,
+                                remaining: rl.remaining,
+                                resetAt: rl.resetAt,
+                            })
                         }
                     }
                 )
@@ -213,13 +227,43 @@ ${conversationHistory}
 
 Provide a helpful response as the tutor. Be conversational and friendly.`
 
-        const response = await generateText(prompt)
+        const supabaseChat = await createClient()
+        const conversationId = crypto.randomUUID()
+
+        // Save user message
+        await supabaseChat
+            .from('chat_messages')
+            .insert({
+                user_id: user.id,
+                role: 'user',
+                content: userMessage,
+                conversation_id: conversationId,
+            })
+
+        // Generate AI response with metadata
+        const result = await generateTextWithMeta(prompt)
+
+        // Save assistant message with token count
+        await supabaseChat
+            .from('chat_messages')
+            .insert({
+                user_id: user.id,
+                role: 'assistant',
+                content: result.text,
+                conversation_id: conversationId,
+                model: result.model,
+                tokens_used: result.tokensUsed,
+            })
 
         return NextResponse.json(
-            { response },
+            { response: result.text },
             {
                 headers: {
-                    'X-RateLimit-Remaining': rateLimit.remaining.toString()
+                    ...rateLimitHeaders({
+                        limit: RATE_LIMITS.chat.limit,
+                        remaining: rl.remaining,
+                        resetAt: rl.resetAt,
+                    })
                 }
             }
         )

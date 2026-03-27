@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { generateText } from '@/lib/gemini'
-import { getAuthenticatedUser, unauthorizedResponse, checkRateLimit, rateLimitResponse } from '@/lib/api-utils'
+import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/api-utils'
+import { checkRateLimit, rateLimitExceededResponse, rateLimitHeaders, RATE_LIMITS } from '@/lib/rate-limit'
+import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
     try {
@@ -10,13 +12,21 @@ export async function POST(request: Request) {
             return unauthorizedResponse()
         }
 
-        // Check rate limit (10 explain requests per minute)
-        const rateLimit = checkRateLimit(user.id, 'explain', 10, 60000)
-        if (!rateLimit.allowed) {
-            return rateLimitResponse(rateLimit.resetIn)
+        const rl = await checkRateLimit(
+            user.id,
+            RATE_LIMITS.ai_general.endpoint,
+            RATE_LIMITS.ai_general.limit,
+            RATE_LIMITS.ai_general.windowSeconds
+        )
+        if (!rl.allowed) {
+            return rateLimitExceededResponse({
+                limit: RATE_LIMITS.ai_general.limit,
+                remaining: rl.remaining,
+                resetAt: rl.resetAt,
+            })
         }
 
-        const { text } = await request.json()
+        const { text, noteId } = await request.json()
 
         if (!text || typeof text !== 'string') {
             return NextResponse.json(
@@ -25,8 +35,45 @@ export async function POST(request: Request) {
             )
         }
 
-        // Limit input size to prevent token abuse
-        const truncatedText = text.slice(0, 2000)
+        // Truncate text block to prevent hash abuse
+        const truncatedText = text.slice(0, 2000).trim()
+
+        // 1. Generate a stable hash for the highlighted text
+        const textHash = Array.from(
+            new Uint8Array(
+                await crypto.subtle.digest('SHA-256', new TextEncoder().encode(truncatedText))
+            )
+        ).map(b => b.toString(16).padStart(2, '0')).join('')
+
+        const supabase = await createClient()
+
+        // 2. Check the per-note cache if noteId is provided
+        if (noteId) {
+            const { data: noteCache } = await supabase
+                .from('notes')
+                .select('ai_explanations')
+                .eq('id', noteId)
+                .eq('user_id', user.id)
+                .single()
+
+            if (noteCache?.ai_explanations && noteCache.ai_explanations[textHash]) {
+                console.log('✅ EXPLAIN: Cache hit for', noteId)
+                return NextResponse.json(
+                    { explanation: noteCache.ai_explanations[textHash], source: 'cache' },
+                    {
+                        headers: {
+                            ...rateLimitHeaders({
+                                limit: RATE_LIMITS.ai_general.limit,
+                                remaining: rl.remaining,
+                                resetAt: rl.resetAt,
+                            })
+                        }
+                    }
+                )
+            }
+        }
+
+        console.log('❌ EXPLAIN: Cache miss, calling Gemini')
 
         const prompt = `You are a helpful tutor. A student has highlighted the following text and wants you to explain it in simple terms.
             Text to explain:
@@ -42,11 +89,41 @@ export async function POST(request: Request) {
 
         const explanation = await generateText(prompt)
 
+        // 3. Save response to cache if noteId was provided
+        if (noteId) {
+            // We use raw sql/rpc or just fetch existing and merge.
+            // Since we can't easily do parallel JSONB merges via simple .update() without overwriting,
+            // we read current, merge, and write. (In high concurrency this might lose keys, but for personal notes it's fine)
+            const { data: currentNote } = await supabase
+                .from('notes')
+                .select('ai_explanations')
+                .eq('id', noteId)
+                .eq('user_id', user.id)
+                .single()
+
+            const currentExplanations = currentNote?.ai_explanations || {}
+
+            await supabase
+                .from('notes')
+                .update({
+                    ai_explanations: {
+                        ...currentExplanations,
+                        [textHash]: explanation
+                    }
+                })
+                .eq('id', noteId)
+                .eq('user_id', user.id)
+        }
+
         return NextResponse.json(
-            { explanation },
+            { explanation, source: 'gemini' },
             {
                 headers: {
-                    'X-RateLimit-Remaining': rateLimit.remaining.toString()
+                    ...rateLimitHeaders({
+                        limit: RATE_LIMITS.ai_general.limit,
+                        remaining: rl.remaining,
+                        resetAt: rl.resetAt,
+                    })
                 }
             }
         )

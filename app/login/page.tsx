@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { BookOpen, Loader2 } from 'lucide-react'
+import { GraduationCap, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function LoginPage() {
@@ -72,7 +72,7 @@ export default function LoginPage() {
                 <CardHeader className="space-y-1 text-center">
                     <div className="flex justify-center mb-4">
                         <div className="p-3 rounded-full bg-linear-to-r from-purple-500 to-pink-500">
-                            <BookOpen className="h-8 w-8 text-white" />
+                            <GraduationCap className="h-8 w-8 text-white" />
                         </div>
                     </div>
                     <CardTitle className="text-2xl font-bold text-white">Welcome back</CardTitle>

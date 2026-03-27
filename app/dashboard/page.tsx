@@ -69,6 +69,17 @@ export default async function DashboardPage() {
     const { notes, tasks, classes, subjects, breaks } = await getStats(supabase, user.id)
     const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Student'
 
+    // Log daily activity server-side (non-blocking).
+    // This is the single source of "user was active today" — StreakBadge only reads.
+    const today = new Date().toISOString().split('T')[0]
+    supabase
+        .from('user_activity')
+        .upsert(
+            { user_id: user.id, activity_date: today, activity_count: 1, updated_at: new Date().toISOString() },
+            { onConflict: 'user_id,activity_date', ignoreDuplicates: true }
+        )
+        .then(() => {})  // fire-and-forget
+
     return <DashboardContent
         notes={notes}
         tasks={tasks}
@@ -143,7 +154,7 @@ function DashboardContent({
 
             {/* Exam Prep Hero (New!) */}
             {subjects.length > 0 ? (
-                <div className="relative p-6 rounded-3xl bg-gradient-to-r from-amber-500/20 to-orange-600/20 border border-amber-500/30 overflow-hidden group">
+                <div className="relative p-6 rounded-3xl bg-linear-to-r from-amber-500/20 to-orange-600/20 border border-amber-500/30 overflow-hidden group">
                     <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
                         <Target className="w-32 h-32 text-amber-500 transform rotate-12" />
                     </div>
@@ -163,7 +174,7 @@ function DashboardContent({
                         </div>
 
                         <a href={`/dashboard/exam-prep/${subjects[0].id}`} className="shrink-0 w-full md:w-auto">
-                            <button className="w-full md:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold shadow-lg shadow-amber-900/20 transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2">
+                            <button className="w-full md:w-auto px-6 py-3 rounded-xl bg-linear-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold shadow-lg shadow-amber-900/20 transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2">
                                 Resume Prep
                                 <TrendingUp className="h-4 w-4" />
                             </button>
@@ -265,7 +276,7 @@ function StatCard({
     const c = colors[color]
 
     return (
-        <div className={`p-5 rounded-2xl bg-gradient-to-br ${c.bg} ${c.border} border backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-default group`}>
+        <div className={`p-5 rounded-2xl bg-linear-to-br ${c.bg} ${c.border} border backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-default group`}>
             <div className="flex items-start justify-between mb-3">
                 <div className={`p-2.5 rounded-xl ${c.iconBg} transition-transform group-hover:scale-110`}>
                     <Icon className={`h-5 w-5 ${c.icon}`} />

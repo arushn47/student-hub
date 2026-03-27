@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { generateText } from '@/lib/gemini'
-import { getAuthenticatedUser, unauthorizedResponse, checkRateLimit, rateLimitResponse } from '@/lib/api-utils'
+import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/api-utils'
+import { checkRateLimit, rateLimitExceededResponse, rateLimitHeaders, RATE_LIMITS } from '@/lib/rate-limit'
 
 // Cache motivation quotes to reduce API calls
 // Key: date string, Value: quote
@@ -38,10 +39,18 @@ export async function GET() {
             return unauthorizedResponse()
         }
 
-        // Check rate limit (5 requests per minute for motivation)
-        const rateLimit = checkRateLimit(user.id, 'motivation', 5, 60000)
-        if (!rateLimit.allowed) {
-            return rateLimitResponse(rateLimit.resetIn)
+        const rl = await checkRateLimit(
+            user.id,
+            RATE_LIMITS.ai_general.endpoint,
+            RATE_LIMITS.ai_general.limit,
+            RATE_LIMITS.ai_general.windowSeconds
+        )
+        if (!rl.allowed) {
+            return rateLimitExceededResponse({
+                limit: RATE_LIMITS.ai_general.limit,
+                remaining: rl.remaining,
+                resetAt: rl.resetAt,
+            })
         }
 
         // Check cache first
@@ -52,7 +61,11 @@ export async function GET() {
                 {
                     headers: {
                         'X-Cache': 'HIT',
-                        'X-RateLimit-Remaining': rateLimit.remaining.toString()
+                        ...rateLimitHeaders({
+                            limit: RATE_LIMITS.ai_general.limit,
+                            remaining: rl.remaining,
+                            resetAt: rl.resetAt,
+                        })
                     }
                 }
             )
@@ -78,7 +91,11 @@ Return ONLY the quote text and attribution (if any), nothing else. Example forma
             {
                 headers: {
                     'X-Cache': 'MISS',
-                    'X-RateLimit-Remaining': rateLimit.remaining.toString()
+                    ...rateLimitHeaders({
+                        limit: RATE_LIMITS.ai_general.limit,
+                        remaining: rl.remaining,
+                        resetAt: rl.resetAt,
+                    })
                 }
             }
         )

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { BookOpen, Loader2 } from 'lucide-react'
+import { GraduationCap, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function SignupPage() {
@@ -71,14 +71,14 @@ export default function SignupPage() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
-            <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]" />
+        <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
+            <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center mask-[linear-gradient(180deg,white,rgba(255,255,255,0))]" />
 
             <Card className="w-full max-w-md relative bg-black/40 backdrop-blur-xl border-white/10">
                 <CardHeader className="space-y-1 text-center">
                     <div className="flex justify-center mb-4">
-                        <div className="p-3 rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
-                            <BookOpen className="h-8 w-8 text-white" />
+                        <div className="p-3 rounded-full bg-linear-to-r from-purple-500 to-pink-500">
+                            <GraduationCap className="h-8 w-8 text-white" />
                         </div>
                     </div>
                     <CardTitle className="text-2xl font-bold text-white">Create an account</CardTitle>
@@ -169,7 +169,7 @@ export default function SignupPage() {
                         </div>
                         <Button
                             type="submit"
-                            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                            className="w-full bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
                             disabled={loading}
                         >
                             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

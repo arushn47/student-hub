@@ -4,9 +4,12 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { createClient } from '@/lib/supabase/client'
 import { LoginRequiredDialog } from '@/components/ui/LoginRequiredDialog'
 import { User } from '@supabase/supabase-js'
+import type { UserRole } from '@/lib/rbac'
 
 interface AuthContextType {
     user: User | null
+    role: UserRole
+    isAdmin: boolean
     isGuest: boolean
     isLoading: boolean
     checkAuthAndPrompt: (feature?: string) => Promise<boolean>
@@ -24,9 +27,30 @@ export function AuthProvider({
     initialUser: User | null
 }) {
     const [user, setUser] = useState<User | null>(initialUser)
+    const [role, setRole] = useState<UserRole>('user')
     const [isLoading, setIsLoading] = useState(false)
     const [showLoginDialog, setShowLoginDialog] = useState(false)
     const [currentFeature, setCurrentFeature] = useState<string>('')
+
+    // Fetch user role from profiles table
+    useEffect(() => {
+        if (!user) {
+            setRole('user')
+            return
+        }
+
+        const supabase = createClient()
+        supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single()
+            .then(({ data }) => {
+                if (data?.role) {
+                    setRole(data.role as UserRole)
+                }
+            })
+    }, [user])
 
     // Listen for auth state changes (e.g. OAuth login, logout)
     useEffect(() => {
@@ -82,6 +106,8 @@ export function AuthProvider({
     return (
         <AuthContext.Provider value={{
             user,
+            role,
+            isAdmin: role === 'admin',
             isGuest,
             isLoading,
             checkAuthAndPrompt,

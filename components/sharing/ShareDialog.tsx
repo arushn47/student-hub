@@ -166,7 +166,7 @@ export function ShareDialog({ contentType, contentId, title, trigger, onShare }:
                             />
                         </div>
                         <Select value={permission} onValueChange={(v: 'view' | 'edit') => setPermission(v)}>
-                            <SelectTrigger className="w-[100px]">
+                            <SelectTrigger className="w-25">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

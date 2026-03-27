@@ -6,7 +6,7 @@ import { FileQuestion, Home, ArrowLeft } from 'lucide-react'
 
 export default function NotFound() {
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
+        <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
             <div className="text-center max-w-md space-y-6">
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-purple-500/20 border border-purple-500/30">
                     <FileQuestion className="h-10 w-10 text-purple-400" />
@@ -22,7 +22,7 @@ export default function NotFound() {
 
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                     <Link href="/dashboard">
-                        <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 w-full">
+                        <Button className="bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 w-full">
                             <Home className="mr-2 h-4 w-4" />
                             Go to Dashboard
                         </Button>

@@ -11,7 +11,6 @@ import {
     Brain,
     Sparkles,
     ArrowRight,
-    BookOpen,
     Target,
     Bell,
     ChevronRight
@@ -97,7 +96,7 @@ export default function LandingPage() {
                     <div className="flex items-center justify-between h-16">
                         <div className="flex items-center gap-2">
                             <div className="p-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500">
-                                <BookOpen className="h-5 w-5 text-white" />
+                                <GraduationCap className="h-5 w-5 text-white" />
                             </div>
                             <span className="text-xl font-bold text-foreground">StudentHub</span>
                         </div>
@@ -311,7 +310,7 @@ export default function LandingPage() {
                 <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
                         <div className="p-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500">
-                            <BookOpen className="h-4 w-4 text-white" />
+                            <GraduationCap className="h-4 w-4 text-white" />
                         </div>
                         <span className="font-semibold text-foreground">StudentHub</span>
                     </div>

@@ -1,160 +1,143 @@
-# StudentHub 📚
+# StudentHub
 
-> Your AI-powered study companion for academic success.
-
-StudentHub is a comprehensive student productivity platform that combines notes, tasks, exam preparation, CGPA tracking, and AI-powered study tools in one beautiful, modern interface.
-
-![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
-![React](https://img.shields.io/badge/React-19-blue?logo=react)
-![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4-38B2AC?logo=tailwind-css)
-![Supabase](https://img.shields.io/badge/Supabase-Database-3FCF8E?logo=supabase)
-
-## ✨ Features
-
-### Core Features
-- **📝 Smart Notes** - Rich text editor with AI-powered summaries and organization
-- **✅ Task Management** - Kanban boards with priorities, due dates, and sub-tasks
-- **📅 Timetable** - Class schedule management with break periods
-- **🎯 Exam Prep** - AI-generated practice questions, flashcards, and study guides
-- **📊 CGPA Calculator** - Track grades, calculate SGPA/CGPA, and plan future performance
-- **⏱️ Pomodoro Timer** - Stay focused with customizable work sessions
-- **📆 Calendar** - Unified view of classes, tasks, and assignments
-- **🔔 Reminders** - Never miss a deadline with smart notifications
-- **💰 Budget Tracker** - Manage student expenses
-
-
-### AI Features (Powered by Gemini)
-- **Study Buddy Chat** - 24/7 AI tutor for explanations and study help
-- **Auto Summaries** - Generate summaries from notes
-- **Quiz Generation** - Create practice questions from your content
-- **PDF/Image Extraction** - Import grades and content from documents
-
-### Integrations
-- **Google Classroom** - Sync assignments and courses
-- **Google Tasks** - Two-way task synchronization
-- **Google Calendar** - View events in your calendar
-
-## 🛠️ Tech Stack
-
-| Category | Technology |
-|----------|------------|
-| Framework | Next.js 15 (App Router) |
-| Frontend | React 19, TailwindCSS v4 |
-| Backend | Next.js API Routes |
-| Database | Supabase (PostgreSQL) |
-| Auth | Supabase Auth + Google OAuth |
-| AI | Google Gemini |
-| UI Components | Radix UI, shadcn/ui |
-| Rich Text | TipTap |
-| PWA | next-pwa |
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Node.js 18+ 
-- npm or yarn
-- Supabase account
-- Google Cloud Console project (for Google integrations)
-- Google AI (Gemini) API key
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/student-hub.git
-   cd student-hub
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Set up environment variables**
-   
-   Create a `.env.local` file in the root directory:
-   ```env
-   # Supabase
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   
-   # Google OAuth (for Classroom, Tasks, Calendar)
-   GOOGLE_CLIENT_ID=your_google_client_id
-   GOOGLE_CLIENT_SECRET=your_google_client_secret
-   
-   # Google Gemini AI
-   GEMINI_API_KEY=your_gemini_api_key
-   ```
-
-4. **Set up Supabase**
-   - Create a new Supabase project
-   - Run the SQL migrations from `/supabase` folder
-   - Enable Google Auth provider in Supabase Dashboard
-
-5. **Run the development server**
-   ```bash
-   npm run dev
-   ```
-
-   Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-## 📁 Project Structure
-
-```
-student-hub/
-├── app/                    # Next.js App Router pages
-│   ├── api/               # API routes
-│   ├── dashboard/         # Dashboard pages
-│   ├── auth/              # Auth pages
-│   └── layout.tsx         # Root layout
-├── components/            # React components
-│   ├── ui/               # shadcn/ui components
-│   ├── dashboard/        # Dashboard widgets
-│   └── ...               # Feature components
-├── lib/                   # Utility functions
-│   ├── supabase/         # Supabase clients
-│   ├── gemini.ts         # AI utilities
-│   └── utils.ts          # General utilities
-├── hooks/                 # Custom React hooks
-├── types/                 # TypeScript types
-└── public/               # Static assets
-```
-
-## 🔧 Available Scripts
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start development server |
-| `npm run build` | Build for production |
-| `npm run start` | Start production server |
-| `npm run lint` | Run ESLint |
-
-## 🌐 Deployment
-
-### Vercel (Recommended)
-
-1. Push your code to GitHub
-2. Import project in [Vercel](https://vercel.com)
-3. Add environment variables
-4. Deploy!
-
-### Environment Variables for Production
-
-Ensure all environment variables from `.env.local` are configured in your deployment platform.
-
-## 📱 PWA Support
-
-StudentHub is a Progressive Web App and can be installed on mobile devices and desktops for an app-like experience.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-This project is open source and available under the [MIT License](LICENSE).
+An all-in-one academic productivity platform built for college students. Manage notes, tasks, exam prep, timetables, grades, budgets, and more — with AI-powered study tools and Google Workspace integration.
 
 ---
 
-Built with ❤️ by [Arush Nandakumar Menon](https://github.com/arushn47)
+## Features
+
+| Category | Features |
+|---|---|
+| **Academics** | AI Exam Prep (syllabus → quizzes, summaries), Notes (rich-text editor with AI explain/breakdown), Tasks (drag-and-drop Kanban), Assignments (group collaboration), Grades & CGPA tracking, Question Paper archive |
+| **Campus Life** | Google Calendar sync, Timetable grid, Attendance tracker |
+| **Productivity** | Pomodoro Focus Timer (with session stats), Reminders (API-backed with notifications), Budget tracker |
+| **AI** | Study Buddy chat (Gemini 2.5 Flash), AI note explanations, syllabus analysis, quiz generation, image-to-text extraction |
+| **Integrations** | Google Calendar, Google Tasks, Google Classroom import |
+| **Infrastructure** | Row-Level Security on every table, DB-backed rate limiting, CSP + security headers, PWA support |
+
+---
+
+## Tech Stack
+
+- **Framework**: [Next.js 15](https://nextjs.org/) (App Router, React 19)
+- **Language**: TypeScript
+- **Database & Auth**: [Supabase](https://supabase.com/) (Postgres, Auth, RLS)
+- **AI**: [Google Gemini](https://ai.google.dev/) via `@google/generative-ai`
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/), [shadcn/ui](https://ui.shadcn.com/), Radix Primitives
+- **Editor**: [Tiptap](https://tiptap.dev/) (rich-text notes)
+- **Testing**: [Vitest](https://vitest.dev/) (unit), [Playwright](https://playwright.dev/) (E2E)
+- **Deployment**: [Vercel](https://vercel.com/)
+
+---
+
+## Local Development
+
+### Prerequisites
+
+- Node.js 18+
+- A [Supabase](https://supabase.com/) project (free tier works)
+- A [Google AI Studio](https://aistudio.google.com/) API key (Gemini)
+- Google Cloud OAuth credentials for Calendar/Tasks/Classroom sync
+
+### 1. Clone & install
+
+```bash
+git clone https://github.com/your-username/student-hub.git
+cd student-hub
+npm install
+```
+
+### 2. Environment variables
+
+```bash
+cp .env.example .env.local
+```
+
+Open `.env.local` and fill in the values. See `.env.example` for descriptions of each variable.
+
+### 3. Database setup
+
+Run the schema and all migrations against your Supabase project:
+
+1. Go to the Supabase SQL Editor.
+2. Paste and run `supabase/schema.sql` to create all tables.
+3. Run each file in `supabase/migrations/` in chronological order to apply incremental changes (RLS policies, rate-limit RPC, plan columns, etc.).
+
+### 4. Start the dev server
+
+```bash
+npm run dev
+```
+
+The app will be available at [http://localhost:3000](http://localhost:3000).
+
+---
+
+## Testing
+
+### Unit tests (Vitest)
+
+```bash
+npm test              # watch mode
+npm run test:ci       # single run + coverage
+```
+
+### E2E tests (Playwright)
+
+```bash
+npx playwright install   # first time only
+npm run test:e2e
+```
+
+### All tests
+
+```bash
+npm run test:all
+```
+
+---
+
+## Deployment (Vercel)
+
+1. Push the repo to GitHub.
+2. Import the project in [Vercel](https://vercel.com/).
+3. Add all env vars from `.env.example` in the Vercel dashboard under **Settings → Environment Variables**.
+4. Deploy. Vercel auto-detects Next.js — no custom build config needed.
+
+### Important notes
+
+- Set `NEXT_PUBLIC_APP_URL` to your production domain (e.g., `https://studenthub.example.com`).
+- Configure the Google OAuth redirect URI in the Google Cloud Console to point to `https://your-domain/auth/callback`.
+- Update the Supabase Auth callback URL in the Supabase dashboard to match.
+
+---
+
+## Payments
+
+Payments are **not yet enabled**. The `profiles` table includes `plan` and `subscription_status` columns to support future monetisation, but all users currently receive the free tier. Plan limits are defined in `lib/plans.ts`.
+
+---
+
+## Project Structure
+
+```
+app/                    # Next.js App Router pages & API routes
+  api/                  # Server-side API routes (ai, google, reminders, pomodoro, etc.)
+  dashboard/            # Authenticated dashboard pages
+components/             # React components (UI, dashboard widgets, providers)
+lib/                    # Shared utilities (Supabase clients, Gemini helpers, env, schemas, plans)
+supabase/               # SQL schema & migrations
+e2e/                    # Playwright E2E tests
+public/                 # Static assets, PWA manifest
+types/                  # Shared TypeScript types
+```
+
+---
+
+## License
+
+Private — not open-source.
+
+---
+
+Built by [Arush Nandakumar Menon](https://github.com/arushn47)

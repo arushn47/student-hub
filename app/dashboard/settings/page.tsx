@@ -190,7 +190,7 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-4">
                         <Avatar className="h-20 w-20">
                             <AvatarImage src={profile?.avatar_url || ''} />
-                            <AvatarFallback className="bg-gradient-to-r from-purple-500 to-pink-500 text-2xl">
+                            <AvatarFallback className="bg-linear-to-r from-purple-500 to-pink-500 text-2xl">
                                 {profile?.full_name?.charAt(0) || profile?.email.charAt(0).toUpperCase()}
                             </AvatarFallback>
                         </Avatar>
@@ -263,7 +263,7 @@ export default function SettingsPage() {
             </Card>
 
             {/* Notifications Section */}
-            <Card className="bg-white/[0.02] border-white/10">
+            <Card className="bg-white/2er-white/10">
                 <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
                         <Bell className="h-5 w-5 text-purple-400" />
@@ -298,7 +298,7 @@ export default function SettingsPage() {
             </Card>
 
             {/* Security Section */}
-            <Card className="bg-white/[0.02] border-white/10">
+            <Card className="bg-white/2 border-white/10">
                 <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
                         <Shield className="h-5 w-5 text-purple-400" />
@@ -330,7 +330,7 @@ export default function SettingsPage() {
             </Card>
 
             {/* Google Integrations */}
-            <Card className="bg-white/[0.02] border-white/10">
+            <Card className="bg-white/2 border-white/10">
                 <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
                         <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -351,7 +351,7 @@ export default function SettingsPage() {
             </Card>
 
             {/* PWA Install Prompt */}
-            <Card className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/30">
+            <Card className="bg-linear-to-r from-purple-500/10 to-pink-500/10 border-purple-500/30">
                 <CardContent className="py-4">
                     <div className="flex items-center justify-between">
                         <div>
@@ -360,7 +360,7 @@ export default function SettingsPage() {
                         </div>
                         <Button
                             size="sm"
-                            className="bg-gradient-to-r from-purple-500 to-pink-500"
+                            className="bg-linear-to-r from-purple-500 to-pink-500"
                             onClick={() => {
                                 toast.info('Look for the "Install" or "Add to Home Screen" option in your browser menu!')
                             }}

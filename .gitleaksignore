@@ -1,0 +1,3 @@
+# Known false positives — add commit hashes or fingerprints here
+# Example:
+# abc123def456  # test fixture with dummy key
