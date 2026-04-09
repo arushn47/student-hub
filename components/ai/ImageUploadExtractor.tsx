@@ -214,7 +214,7 @@ export function ImageUploadExtractor({
                 toast.error('No data found in response')
             }
         } catch (error: unknown) {
-            console.error('Extraction error:', JSON.stringify(error, null, 2))
+            console.error('Extraction error:', error instanceof Error ? error.message : error)
             const errorMessage = error instanceof Error ? error.message : 'Failed to analyze image'
             toast.error(errorMessage)
         } finally {
