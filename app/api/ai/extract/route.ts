@@ -173,7 +173,7 @@ For EACH course (in the same order provided), return a difficulty rating.`
 
         // Try with a rotated key from the pool; on 429/503, grab the next key and retry
         try {
-            const model = getRotatedModel('gemini-2.5-flash')
+            const model = getRotatedModel('gemini-2.0-flash')
             result = await extractLimiter.run(() => model.generateContent(promptContent))
         } catch (primaryErr) {
             const msg = primaryErr instanceof Error ? primaryErr.message : ''
@@ -182,7 +182,7 @@ For EACH course (in the same order provided), return a difficulty rating.`
 
             if (isRetryable) {
                 console.warn('Primary key/model unavailable, retrying with next key in pool')
-                const fallback = getRotatedModel('gemini-2.0-flash')
+                const fallback = getRotatedModel('gemini-1.5-flash')
                 result = await fallback.generateContent(promptContent)
             } else {
                 throw primaryErr
