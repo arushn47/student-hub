@@ -114,7 +114,10 @@ export function ImageUploadExtractor({
             const result = await response.json()
 
             if (!response.ok) {
-                throw new Error(result.error || 'Failed to extract data')
+                const errMsg = typeof result.error === 'string'
+                    ? result.error
+                    : (result.error?.message || JSON.stringify(result.error) || 'Failed to extract data')
+                throw new Error(errMsg)
             }
 
             if (result.data) {

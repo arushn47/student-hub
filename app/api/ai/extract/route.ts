@@ -1,28 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/api-utils'
 import { checkRateLimit, rateLimitExceededResponse, rateLimitHeaders } from '@/lib/rate-limit'
 import { AILimiter } from '@/lib/ai/limiter'
+import { getRotatedModel, hasKeys } from '@/lib/ai/key-pool'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-const primaryModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
-const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+// Allow up to 60s on Vercel Pro; Hobby caps at 10s regardless.
+export const maxDuration = 60
 
 // Dedicated limiter with longer timeout for file extraction (PDFs can take 30-60s)
 const extractLimiter = new AILimiter({
     concurrency: 3,
     maxQueue: 10,
-    timeoutMs: 60000, // 60s — PDFs need much more time than text
+    timeoutMs: 55000, // 55s — stay under Vercel's 60s max
     failureThreshold: 5,
     cooldownMs: 60000,
 })
 
-// Limit to 10 extractions per hour per user to save costs
-const RATE_LIMIT = 10
+// Limit extractions per hour per user to save costs
+const RATE_LIMIT = 30
 const RATE_LIMIT_WINDOW = 60 * 60 * 1000 // 1 hour
 
 export async function POST(req: NextRequest) {
     try {
+        if (!hasKeys()) {
+            return NextResponse.json(
+                { error: 'AI service is not configured. Please contact the administrator.' },
+                { status: 503 }
+            )
+        }
+
         const user = await getAuthenticatedUser()
         if (!user) return unauthorizedResponse()
 
@@ -140,7 +146,8 @@ For EACH course (in the same order provided), return a difficulty rating.`
         let result
 
         // Build the prompt content (text-only or with image)
-        let promptContent: Parameters<typeof primaryModel.generateContent>[0]
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let promptContent: any
 
         if (textOnlyTypes.includes(type)) {
             promptContent = fullPrompt
@@ -164,17 +171,19 @@ For EACH course (in the same order provided), return a difficulty rating.`
             ]
         }
 
-        // Try primary model, fall back to 2.0-flash on 503/429
+        // Try with a rotated key from the pool; on 429/503, grab the next key and retry
         try {
-            result = await extractLimiter.run(() => primaryModel.generateContent(promptContent))
+            const model = getRotatedModel('gemini-2.5-flash')
+            result = await extractLimiter.run(() => model.generateContent(promptContent))
         } catch (primaryErr) {
             const msg = primaryErr instanceof Error ? primaryErr.message : ''
             const status = (primaryErr as { status?: number })?.status
             const isRetryable = status === 503 || status === 429 || msg.includes('503') || msg.includes('429') || msg.toLowerCase().includes('overloaded') || msg.toLowerCase().includes('high demand')
 
             if (isRetryable) {
-                console.warn('Primary model unavailable, falling back to gemini-2.0-flash')
-                result = await fallbackModel.generateContent(promptContent)
+                console.warn('Primary key/model unavailable, retrying with next key in pool')
+                const fallback = getRotatedModel('gemini-2.0-flash')
+                result = await fallback.generateContent(promptContent)
             } else {
                 throw primaryErr
             }
