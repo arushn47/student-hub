@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { geminiModel } from '@/lib/gemini'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/api-utils'
 import { checkRateLimit, rateLimitExceededResponse, rateLimitHeaders } from '@/lib/rate-limit'
+import { AILimiter } from '@/lib/ai/limiter'
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+const primaryModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+
+// Dedicated limiter with longer timeout for file extraction (PDFs can take 30-60s)
+const extractLimiter = new AILimiter({
+    concurrency: 3,
+    maxQueue: 10,
+    timeoutMs: 60000, // 60s — PDFs need much more time than text
+    failureThreshold: 5,
+    cooldownMs: 60000,
+})
 
 // Limit to 10 extractions per hour per user to save costs
 const RATE_LIMIT = 10
@@ -125,22 +139,21 @@ For EACH course (in the same order provided), return a difficulty rating.`
 
         let result
 
-        // Handle text-only requests differently
+        // Build the prompt content (text-only or with image)
+        let promptContent: Parameters<typeof primaryModel.generateContent>[0]
+
         if (textOnlyTypes.includes(type)) {
-            // Text-only AI generation (no image)
-            result = await geminiModel.generateContent(fullPrompt)
+            promptContent = fullPrompt
         } else {
-            // Image-based AI generation
             if (!file) {
                 return NextResponse.json({ error: 'Image is required for this type' }, { status: 400 })
             }
 
-            // Convert file to base64
             const arrayBuffer = await file.arrayBuffer()
             const buffer = Buffer.from(arrayBuffer)
             const base64Image = buffer.toString('base64')
 
-            result = await geminiModel.generateContent([
+            promptContent = [
                 fullPrompt,
                 {
                     inlineData: {
@@ -148,7 +161,23 @@ For EACH course (in the same order provided), return a difficulty rating.`
                         data: base64Image
                     }
                 }
-            ])
+            ]
+        }
+
+        // Try primary model, fall back to 2.0-flash on 503/429
+        try {
+            result = await extractLimiter.run(() => primaryModel.generateContent(promptContent))
+        } catch (primaryErr) {
+            const msg = primaryErr instanceof Error ? primaryErr.message : ''
+            const status = (primaryErr as { status?: number })?.status
+            const isRetryable = status === 503 || status === 429 || msg.includes('503') || msg.includes('429') || msg.toLowerCase().includes('overloaded') || msg.toLowerCase().includes('high demand')
+
+            if (isRetryable) {
+                console.warn('Primary model unavailable, falling back to gemini-2.0-flash')
+                result = await fallbackModel.generateContent(promptContent)
+            } else {
+                throw primaryErr
+            }
         }
 
         const responseText = result.response.text()

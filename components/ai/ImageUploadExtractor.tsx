@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Upload, X, Loader2, Sparkles } from 'lucide-react'
+import { Upload, X, Loader2, Sparkles, Clipboard } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface ImageUploadExtractorProps {
@@ -27,20 +27,74 @@ export function ImageUploadExtractor({
     const [selectedImage, setSelectedImage] = useState<string | null>(null)
     const [file, setFile] = useState<File | null>(null)
     const [loading, setLoading] = useState(false)
+    const [isDragging, setIsDragging] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const dropZoneRef = useRef<HTMLDivElement>(null)
+
+    const processFile = useCallback((f: File) => {
+        if (f.size > 5 * 1024 * 1024) {
+            toast.error('File size must be less than 5MB')
+            return
+        }
+        const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif', 'application/pdf']
+        if (!validTypes.includes(f.type)) {
+            toast.error('Unsupported file type. Use PNG, JPG, WebP, or PDF.')
+            return
+        }
+        setFile(f)
+        const reader = new FileReader()
+        reader.onload = (e) => setSelectedImage(e.target?.result as string)
+        reader.readAsDataURL(f)
+    }, [])
+
+    // Listen for paste events when dialog is open
+    useEffect(() => {
+        if (!open) return
+
+        const handlePaste = (e: ClipboardEvent) => {
+            const items = e.clipboardData?.items
+            if (!items) return
+
+            for (const item of Array.from(items)) {
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault()
+                    const pastedFile = item.getAsFile()
+                    if (pastedFile) {
+                        processFile(pastedFile)
+                        toast.success('Image pasted from clipboard!')
+                    }
+                    return
+                }
+            }
+        }
+
+        window.addEventListener('paste', handlePaste)
+        return () => window.removeEventListener('paste', handlePaste)
+    }, [open, processFile])
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                toast.error('Image size must be less than 5MB')
-                return
-            }
-            setFile(file)
-            const reader = new FileReader()
-            reader.onload = (e) => setSelectedImage(e.target?.result as string)
-            reader.readAsDataURL(file)
-        }
+        const f = e.target.files?.[0]
+        if (f) processFile(f)
+    }
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(true)
+    }
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(false)
+    }
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(false)
+        const droppedFile = e.dataTransfer.files?.[0]
+        if (droppedFile) processFile(droppedFile)
     }
 
     const handleExtract = async () => {
@@ -113,14 +167,33 @@ export function ImageUploadExtractor({
                 <div className="space-y-4 pt-4">
                     {!selectedImage && !file ? (
                         <div
+                            ref={dropZoneRef}
                             onClick={() => fileInputRef.current?.click()}
-                            className="border-2 border-dashed border-white/10 hover:border-violet-500/50 hover:bg-white/5 rounded-xl h-48 flex flex-col items-center justify-center cursor-pointer transition-all group"
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                            className={`border-2 border-dashed rounded-xl h-48 flex flex-col items-center justify-center cursor-pointer transition-all group ${
+                                isDragging
+                                    ? 'border-violet-500 bg-violet-500/10 scale-[1.02]'
+                                    : 'border-white/10 hover:border-violet-500/50 hover:bg-white/5'
+                            }`}
                         >
-                            <div className="p-4 rounded-full bg-white/5 group-hover:bg-violet-500/10 mb-3 transition-colors">
-                                <Upload className="h-6 w-6 text-gray-400 group-hover:text-violet-400" />
+                            <div className={`p-4 rounded-full mb-3 transition-colors ${
+                                isDragging ? 'bg-violet-500/20' : 'bg-white/5 group-hover:bg-violet-500/10'
+                            }`}>
+                                {isDragging ? (
+                                    <Upload className="h-6 w-6 text-violet-400 animate-bounce" />
+                                ) : (
+                                    <Upload className="h-6 w-6 text-gray-400 group-hover:text-violet-400" />
+                                )}
                             </div>
-                            <p className="text-sm text-gray-300 font-medium">Click to upload file</p>
-                            <p className="text-xs text-gray-500 mt-1">PNG, JPG, PDF up to 5MB</p>
+                            <p className="text-sm text-gray-300 font-medium">
+                                {isDragging ? 'Drop file here' : 'Click, paste, or drag file'}
+                            </p>
+                            <div className="flex items-center gap-1.5 mt-1">
+                                <Clipboard className="h-3 w-3 text-gray-500" />
+                                <p className="text-xs text-gray-500">Ctrl+V to paste • PNG, JPG, PDF up to 5MB</p>
+                            </div>
                         </div>
                     ) : (
                         <div className="relative rounded-xl overflow-hidden border border-white/10 bg-black/40 aspect-video flex items-center justify-center">

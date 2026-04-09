@@ -1545,7 +1545,7 @@ export default function GradesPage() {
                                         <SelectValue placeholder="Credits" />
                                     </SelectTrigger>
                                     <SelectContent className="bg-popover border-border">
-                                        {[0, 1, 2, 3, 4].map((n) => (
+                                        {[0, 1, 2, 3, 4, 5].map((n) => (
                                             <SelectItem key={n} value={n.toString()}>
                                                 {`${n}`}
                                             </SelectItem>
