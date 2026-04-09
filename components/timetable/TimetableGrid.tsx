@@ -348,6 +348,22 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
                                         'Sunday': 0, 'Sun': 0
                                     }
 
+                                    // Create a local color map for the new classes combined with existing classes
+                                    // This ensures that new subjects are assigned proper, distinct colors at insert-time.
+                                    const allUniqueSubjects = new Set<string>()
+                                    for (const existingCls of classes) {
+                                        allUniqueSubjects.add(existingCls.name.split('-')[0].trim().toUpperCase())
+                                    }
+                                    for (const newCls of data.classes) {
+                                        const subjectName = newCls.subject || newCls.name || 'Unknown'
+                                        allUniqueSubjects.add(subjectName.split('-')[0].trim().toUpperCase())
+                                    }
+
+                                    const localColorMap = new Map<string, string>()
+                                    Array.from(allUniqueSubjects).sort().forEach((subject, index) => {
+                                        localColorMap.set(subject, colors[index % colors.length])
+                                    })
+
                                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                     const classesToInsert = data.classes.map((cls: any) => {
                                         let start = '09:00'
@@ -368,14 +384,17 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
                                             }
                                         }
 
+                                        const courseName = cls.subject || cls.name || 'Unknown Class'
+                                        const baseCourse = courseName.split('-')[0].trim().toUpperCase()
+
                                         return {
                                             user_id: userId,
-                                            name: cls.subject || cls.name || 'Unknown Class',
+                                            name: courseName,
                                             day_of_week: dayMap[cls.day] ?? 1,
                                             start_time: start,
                                             end_time: end,
                                             location: cls.location || '',
-                                            color: getColorForSubject(cls.subject || cls.name || 'Unknown'),
+                                            color: localColorMap.get(baseCourse) || colors[0],
                                             semester_id: selectedSemester !== 'all' ? selectedSemester : null
                                         }
                                     })
@@ -499,7 +518,7 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
 
             {/* Create Class Dialog */}
             <Dialog open={createDialog} onOpenChange={setCreateDialog}>
-                <DialogContent className="bg-gray-900 border-white/10 max-w-md">
+                <DialogContent aria-describedby={undefined} className="bg-gray-900 border-white/10 max-w-md">
                     <DialogHeader>
                         <DialogTitle className="text-white">Add Class</DialogTitle>
                         {selectedSemester !== 'all' && selectedSemesterName && (

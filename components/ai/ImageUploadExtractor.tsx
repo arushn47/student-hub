@@ -153,11 +153,11 @@ export function ImageUploadExtractor({
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="glass-card border-violet-500/20 max-w-md">
+            <DialogContent aria-describedby={undefined} className="bg-gray-900 border-white/10 sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle className="text-white flex items-center gap-2">
+                    <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-white">
                         <Sparkles className="h-5 w-5 text-violet-400" />
-                        {title}
+                        {title || "Extract from Image"}
                     </DialogTitle>
                     <p className="text-gray-400 text-sm">
                         {description}
@@ -206,13 +206,15 @@ export function ImageUploadExtractor({
                                 </div>
                             ) : (
                                 <div className="relative w-full h-full">
-                                    <Image
-                                        src={selectedImage!}
-                                        alt="Preview"
-                                        fill
-                                        unoptimized
-                                        className="object-contain"
-                                    />
+                                    {selectedImage && (
+                                        <Image
+                                            src={selectedImage}
+                                            alt="Preview"
+                                            fill
+                                            unoptimized
+                                            className="object-contain"
+                                        />
+                                    )}
                                 </div>
                             )}
                             <button
