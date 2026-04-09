@@ -209,16 +209,41 @@ For EACH course (in the same order provided), return a difficulty rating.`
 
     } catch (error: unknown) {
         console.error('Extraction API Error:', error)
-        // Check for 429/Quota errors from Google
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const isQuotaError = errorMessage.includes('429') || (error as { status?: number })?.status === 429;
+        const errorMessage = error instanceof Error ? error.message : String(error) || 'Unknown error'
+        const statusCode = (error as { status?: number })?.status
 
-        if (isQuotaError) {
+        // 429 / Quota errors
+        if (statusCode === 429 || errorMessage.includes('429') || errorMessage.toLowerCase().includes('quota')) {
             return NextResponse.json(
-                { error: 'AI Quota Exceeded. Please try again later or check your API limit.' },
+                { error: 'AI quota exceeded. Please try again in a few minutes.' },
                 { status: 429 }
             )
         }
-        return NextResponse.json({ error: errorMessage || 'Internal Server Error' }, { status: 500 })
+
+        // 503 / High demand errors
+        if (statusCode === 503 || errorMessage.includes('503') || errorMessage.toLowerCase().includes('high demand') || errorMessage.toLowerCase().includes('overloaded')) {
+            return NextResponse.json(
+                { error: 'AI service is temporarily busy. Please try again in a moment.' },
+                { status: 503 }
+            )
+        }
+
+        // Timeout errors from limiter
+        if (errorMessage.includes('timed out')) {
+            return NextResponse.json(
+                { error: 'Request took too long. Try a smaller file or try again later.' },
+                { status: 504 }
+            )
+        }
+
+        // Circuit breaker open
+        if (errorMessage.includes('circuit open') || errorMessage.includes('service busy')) {
+            return NextResponse.json(
+                { error: 'AI service is temporarily unavailable. Please wait a minute and try again.' },
+                { status: 503 }
+            )
+        }
+
+        return NextResponse.json({ error: errorMessage || 'Failed to process file. Please try again.' }, { status: 500 })
     }
 }
