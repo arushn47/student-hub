@@ -167,15 +167,21 @@ export async function generateContent(
     promptContent: string | (string | Part)[],
     timeoutMs: number = 55000
 ) {
-    return withModelFallback(async (model, modelName) => {
-        console.log(`Extraction with ${modelName}`)
-        return Promise.race([
-            model.generateContent(promptContent),
-            new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('AI request timed out')), timeoutMs)
-            ),
-        ])
-    })
+    try {
+        return await withModelFallback(async (model, modelName) => {
+            console.log(`Extraction with ${modelName}`)
+            return Promise.race([
+                model.generateContent(promptContent),
+                new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('AI request timed out')), timeoutMs)
+                ),
+            ])
+        })
+    } catch (error) {
+        const classified = classifyGeminiError(error)
+        console.error('Gemini API Error:', error)
+        throw classified
+    }
 }
 
 function classifyGeminiError(error: unknown): Error {
