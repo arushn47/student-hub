@@ -718,7 +718,8 @@ export default function GradesPage() {
                                             name: c.name || 'Unknown Course',
                                             credits: c.credits || 3,
                                             grade: grade,
-                                            semester: c.semester || 'Imported'
+                                            semester: c.semester || 'Imported',
+                                            category: c.category || 'none'
                                         }
                                     })
 

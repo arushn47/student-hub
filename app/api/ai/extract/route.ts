@@ -66,36 +66,38 @@ export async function POST(req: NextRequest) {
 
         switch (type) {
             case 'grades':
+                const categoryMappingInstructions = `
+IMPORTANT - CATEGORY MAPPING (Course Distribution):
+If the text/image includes a "Course Distribution" or similar column (like PC, UCNS, NMC, etc.), map it exactly to ONE of these specific categories:
+- "Programme Core" (if PC)
+- "Programme Elective" (if PE)
+- "University Core - Natural Science" (if UCNS)
+- "University Core - Engineering Sciences" (if UCBES or UCES)
+- "University Core - Skill Development" (if UCSD)
+- "University Core - Humanities & Social Science" (if UCHSS)
+- "University Core - Project & Internships" (if UCPI)
+- "University Elective - Natural Science" (if UENS or UENSE)
+- "University Elective - Multidisciplinary" (if UEM)
+- "University Elective - Humanities & Social" (if UEHSS)
+- "University Elective - Open Electives" (if UEOE or OE)
+- "Non-Graded Mandatory Courses" (if NMC)
+If no mapping matches, omit the category or make your best guess.`;
+
+                const semesterMappingInstructions = `
+IMPORTANT - SEMESTER MAPPING:
+- If you see "Exam Month" (e.g., Jan-2024, Apr-2024, Aug-2024), map chronologically:
+  - Sort unique exam months by date
+  - Earliest = "Semester 1", Second = "Semester 2", etc.
+  - Example: Jan-2024 -> "Semester 1", Apr-2024 -> "Semester 2", Aug-2024 -> "Semester 3"
+- If explicit semester info exists (e.g., "Fall 2024"), keep as-is
+
+For VIT India grades: O/S = 10, A = 9, B = 8, C = 7, D = 6, E = 5, F = 0`;
+
                 systemPrompt = hasOcrText
-                    ? `Analyze this OCR-extracted text from a grade report, transcript, or result slip. Extract ALL courses/subjects with their grades, credits, AND semester.
-
-IMPORTANT - SEMESTER MAPPING:
-- If the text shows "Exam Month" (e.g., Jan-2024, Apr-2024, Aug-2024), map them to semesters CHRONOLOGICALLY:
-  - Sort all unique exam months by date
-  - The EARLIEST exam month = "Semester 1"
-  - The SECOND earliest = "Semester 2", and so on
-- If explicit semester info exists (e.g., "Fall 2024", "Winter 2025"), keep as-is
-
-For VIT India grades: O/S = 10, A = 9, B = 8, C = 7, D = 6, E = 5, F = 0
-
-OCR TEXT:
-${text}`
-                    : `Analyze this image of a grade report, transcript, or result slip. Extract ALL courses/subjects with their grades, credits, AND semester.
-
-IMPORTANT - SEMESTER MAPPING:
-- If the image shows "Exam Month" (e.g., Jan-2024, Apr-2024, Aug-2024), map them to semesters CHRONOLOGICALLY:
-  - Sort all unique exam months by date
-  - The EARLIEST exam month = "Semester 1"
-  - The SECOND earliest = "Semester 2", and so on
-  - Example: If you see Jan-2024, Apr-2024, Aug-2024, Jan-2025:
-    - Jan-2024 → "Semester 1"
-    - Apr-2024 → "Semester 2"  
-    - Aug-2024 → "Semester 3"
-    - Jan-2025 → "Semester 4"
-- If explicit semester info exists (e.g., "Fall 2024", "Winter 2025"), keep as-is
-
-For VIT India grades: O/S = 10, A = 9, B = 8, C = 7, D = 6, E = 5, F = 0`
-                jsonSchema = 'Return JSON: { "courses": [{ "name": "string (course title)", "grade": "string (S/A/B/C/D/E/F/O)", "credits": number, "semester": "string (e.g. Semester 1, Semester 2)" }] }'
+                    ? `Analyze this OCR-extracted text from a grade report. Extract ALL courses with their grades, credits, semester, AND category.\n${semesterMappingInstructions}\n${categoryMappingInstructions}\n\nOCR TEXT:\n${text}`
+                    : `Analyze this image of a grade report. Extract ALL courses with their grades, credits, semester, AND category.\n${semesterMappingInstructions}\n${categoryMappingInstructions}`;
+                
+                jsonSchema = 'Return JSON: { "courses": [{ "name": "string (course title)", "grade": "string (S/A/B/C/D/E/F/O)", "credits": number, "semester": "string (e.g. Semester 1, Semester 2)", "category": "string (Mapped category, default none)" }] }'
                 break
             case 'flashcards':
                 systemPrompt = hasOcrText
