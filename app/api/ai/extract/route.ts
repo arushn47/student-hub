@@ -189,7 +189,13 @@ For EACH course (in the same order provided), return a difficulty rating.`
             }
         }
 
-        const responseText = result.response.text()
+        if (!result || !result.response) {
+            throw new Error("Invalid AI response")
+        }
+        const responseText = await result.response.text()
+        if (!responseText) {
+            throw new Error("Empty AI response")
+        }
 
         // Clean markdown if present
         const cleanedText = responseText

@@ -111,14 +111,30 @@ export function ImageUploadExtractor({
                 body: formData,
             })
 
-            const result = await response.json()
-
             if (!response.ok) {
-                const errMsg = typeof result.error === 'string'
-                    ? result.error
-                    : (result.error?.message || JSON.stringify(result.error) || 'Failed to extract data')
+                // Try to extract a meaningful error message
+                let errMsg = `Server error (${response.status})`
+                try {
+                    const result = await response.json()
+                    if (typeof result.error === 'string') {
+                        errMsg = result.error
+                    } else if (result.error?.message) {
+                        errMsg = result.error.message
+                    } else if (result.message) {
+                        errMsg = result.message
+                    } else if (typeof result === 'object') {
+                        errMsg = JSON.stringify(result)
+                    }
+                } catch {
+                    // Response wasn't JSON (e.g. Vercel timeout HTML page)
+                    if (response.status === 504) {
+                        errMsg = 'Request timed out. Try a smaller file.'
+                    }
+                }
                 throw new Error(errMsg)
             }
+
+            const result = await response.json()
 
             if (result.data) {
                 onExtract(result.data)
@@ -129,8 +145,8 @@ export function ImageUploadExtractor({
                 toast.error('No data found in response')
             }
         } catch (error: unknown) {
-            console.error('Extraction error:', error)
-            const errorMessage = error instanceof Error ? error.message : 'Failed to analyze image';
+            console.error('Extraction error:', JSON.stringify(error, null, 2))
+            const errorMessage = error instanceof Error ? error.message : 'Failed to analyze image'
             toast.error(errorMessage)
         } finally {
             setLoading(false)
@@ -156,7 +172,7 @@ export function ImageUploadExtractor({
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent aria-describedby={undefined} className="bg-gray-900 border-white/10 sm:max-w-md">
+            <DialogContent  className="bg-gray-900 border-white/10 sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-white">
                         <Sparkles className="h-5 w-5 text-violet-400" />
