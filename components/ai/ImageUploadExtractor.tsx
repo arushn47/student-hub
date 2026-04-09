@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Upload, X, Loader2, Sparkles, Clipboard } from 'lucide-react'
 import { toast } from 'sonner'
+import { extractTextFromImages } from '@/lib/ocr'
 
 interface ImageUploadExtractorProps {
     type: 'grades' | 'flashcards' | 'timetable' | 'expenses'
@@ -24,28 +25,63 @@ export function ImageUploadExtractor({
     description = 'Upload an image to automatically extract data.'
 }: ImageUploadExtractorProps) {
     const [open, setOpen] = useState(false)
-    const [selectedImage, setSelectedImage] = useState<string | null>(null)
-    const [file, setFile] = useState<File | null>(null)
+    const [selectedImages, setSelectedImages] = useState<string[]>([])
+    const [files, setFiles] = useState<File[]>([])
     const [loading, setLoading] = useState(false)
+    const [statusText, setStatusText] = useState('')
     const [isDragging, setIsDragging] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const dropZoneRef = useRef<HTMLDivElement>(null)
 
-    const processFile = useCallback((f: File) => {
-        if (f.size > 5 * 1024 * 1024) {
-            toast.error('File size must be less than 5MB')
-            return
-        }
+    const processFiles = useCallback((newFiles: File[]) => {
         const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif', 'application/pdf']
-        if (!validTypes.includes(f.type)) {
-            toast.error('Unsupported file type. Use PNG, JPG, WebP, or PDF.')
-            return
+
+        let acceptedFiles = newFiles.filter(f => validTypes.includes(f.type))
+        if (acceptedFiles.length < newFiles.length) {
+            toast.error('Some files were unsupported and skipped.')
         }
-        setFile(f)
-        const reader = new FileReader()
-        reader.onload = (e) => setSelectedImage(e.target?.result as string)
-        reader.readAsDataURL(f)
-    }, [])
+
+        // Check file size
+        if (acceptedFiles.some(f => f.size > 5 * 1024 * 1024)) {
+            toast.error('Files must be less than 5MB.')
+            acceptedFiles = acceptedFiles.filter(f => f.size <= 5 * 1024 * 1024)
+        }
+
+        if (acceptedFiles.length === 0) return
+
+        // If a PDF is included, it must be the only file
+        if (acceptedFiles.some(f => f.type === 'application/pdf')) {
+            if (files.length > 0 || acceptedFiles.length > 1) {
+                toast.error('PDFs must be uploaded one at a time without other files.')
+                acceptedFiles = [acceptedFiles.find(f => f.type === 'application/pdf')!]
+                setFiles(acceptedFiles)
+                setSelectedImages([])
+                return
+            }
+        }
+
+        // Limit to 5 files total
+        const totalFiles = [...files, ...acceptedFiles]
+        if (totalFiles.length > 5) {
+            toast.error('Maximum 5 images allowed.')
+            acceptedFiles = acceptedFiles.slice(0, 5 - files.length)
+        }
+
+        if (acceptedFiles.length === 0) return
+
+        setFiles(prev => [...prev, ...acceptedFiles])
+
+        // Read and set previews for images
+        acceptedFiles.forEach(f => {
+            if (f.type !== 'application/pdf') {
+                const reader = new FileReader()
+                reader.onload = (e) => {
+                    setSelectedImages(prev => [...prev, e.target?.result as string])
+                }
+                reader.readAsDataURL(f)
+            }
+        })
+    }, [files.length])
 
     // Listen for paste events when dialog is open
     useEffect(() => {
@@ -60,7 +96,7 @@ export function ImageUploadExtractor({
                     e.preventDefault()
                     const pastedFile = item.getAsFile()
                     if (pastedFile) {
-                        processFile(pastedFile)
+                        processFiles([pastedFile])
                         toast.success('Image pasted from clipboard!')
                     }
                     return
@@ -70,11 +106,10 @@ export function ImageUploadExtractor({
 
         window.addEventListener('paste', handlePaste)
         return () => window.removeEventListener('paste', handlePaste)
-    }, [open, processFile])
+    }, [open, processFiles])
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const f = e.target.files?.[0]
-        if (f) processFile(f)
+        if (e.target.files?.length) processFiles(Array.from(e.target.files))
     }
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -93,23 +128,57 @@ export function ImageUploadExtractor({
         e.preventDefault()
         e.stopPropagation()
         setIsDragging(false)
-        const droppedFile = e.dataTransfer.files?.[0]
-        if (droppedFile) processFile(droppedFile)
+        if (e.dataTransfer.files?.length) processFiles(Array.from(e.dataTransfer.files))
     }
 
     const handleExtract = async () => {
-        if (!file) return
+        if (files.length === 0) return
 
         try {
             setLoading(true)
-            const formData = new FormData()
-            formData.append('image', file)
-            formData.append('type', type)
+            const hasPdf = files.some(f => f.type === 'application/pdf')
 
-            const response = await fetch('/api/ai/extract', {
-                method: 'POST',
-                body: formData,
-            })
+            let response: Response
+
+            if (hasPdf) {
+                // PDFs can't be OCR'd client-side — send directly to Gemini vision
+                setStatusText('Uploading PDF...')
+                const formData = new FormData()
+                files.forEach(f => formData.append('image', f))
+                formData.append('type', type)
+
+                response = await fetch('/api/ai/extract', {
+                    method: 'POST',
+                    body: formData,
+                })
+            } else {
+                // Images: run OCR client-side first, then send text to API
+                setStatusText('Reading text from image...')
+                const ocrText = await extractTextFromImages(files, (progress) => {
+                    setStatusText(`Reading text... ${progress}%`)
+                })
+
+                if (ocrText && ocrText.trim().length > 20) {
+                    // OCR produced meaningful text — send as text (saves quota)
+                    setStatusText('Extracting data...')
+                    response = await fetch('/api/ai/extract', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type, text: ocrText }),
+                    })
+                } else {
+                    // OCR produced too little text — fall back to image upload
+                    setStatusText('Uploading image to AI...')
+                    const formData = new FormData()
+                    files.forEach(f => formData.append('image', f))
+                    formData.append('type', type)
+
+                    response = await fetch('/api/ai/extract', {
+                        method: 'POST',
+                        body: formData,
+                    })
+                }
+            }
 
             if (!response.ok) {
                 // Try to extract a meaningful error message
@@ -150,12 +219,14 @@ export function ImageUploadExtractor({
             toast.error(errorMessage)
         } finally {
             setLoading(false)
+            setStatusText('')
         }
     }
 
     const reset = () => {
-        setSelectedImage(null)
-        setFile(null)
+        setSelectedImages([])
+        setFiles([])
+        setStatusText('')
         if (fileInputRef.current) fileInputRef.current.value = ''
     }
 
@@ -172,7 +243,10 @@ export function ImageUploadExtractor({
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent  className="bg-gray-900 border-white/10 sm:max-w-md">
+            <DialogContent  className="bg-gray-900 border-white/10 sm:max-w-md" aria-describedby="dialog-description">
+                <div id="dialog-description" className="sr-only">
+                    {description}
+                </div>
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-white">
                         <Sparkles className="h-5 w-5 text-violet-400" />
@@ -184,7 +258,7 @@ export function ImageUploadExtractor({
                 </DialogHeader>
 
                 <div className="space-y-4 pt-4">
-                    {!selectedImage && !file ? (
+                    {selectedImages.length === 0 && files.length === 0 ? (
                         <div
                             ref={dropZoneRef}
                             onClick={() => fileInputRef.current?.click()}
@@ -216,30 +290,32 @@ export function ImageUploadExtractor({
                         </div>
                     ) : (
                         <div className="relative rounded-xl overflow-hidden border border-white/10 bg-black/40 aspect-video flex items-center justify-center">
-                            {file?.type === 'application/pdf' ? (
+                            {files[0]?.type === 'application/pdf' ? (
                                 <div className="text-center">
                                     <div className="mx-auto bg-red-500/10 p-4 rounded-full w-16 h-16 flex items-center justify-center mb-2">
                                         <div className="text-red-400 font-bold text-xl">PDF</div>
                                     </div>
-                                    <p className="text-sm text-gray-300">{file.name}</p>
+                                    <p className="text-sm text-gray-300">{files[0].name}</p>
                                 </div>
                             ) : (
-                                <div className="relative w-full h-full">
-                                    {selectedImage && (
-                                        <Image
-                                            src={selectedImage}
-                                            alt="Preview"
-                                            fill
-                                            unoptimized
-                                            className="object-contain"
-                                        />
-                                    )}
+                                <div className={`w-full h-full p-2 grid gap-2 ${selectedImages.length > 2 ? 'grid-cols-2 grid-rows-2' : selectedImages.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                    {selectedImages.map((src, i) => (
+                                        <div key={i} className="relative w-full h-full min-h-[100px] rounded-lg overflow-hidden bg-black/60 shadow-inner">
+                                            <Image
+                                                src={src}
+                                                alt={`Preview ${i}`}
+                                                fill
+                                                unoptimized
+                                                className="object-contain"
+                                            />
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                             <button
                                 type="button"
                                 onClick={reset}
-                                className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
+                                className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors z-10"
                             >
                                 <X className="h-4 w-4" />
                             </button>
@@ -252,6 +328,7 @@ export function ImageUploadExtractor({
                         onChange={handleFileSelect}
                         accept="image/*,application/pdf"
                         className="hidden"
+                        multiple
                     />
 
                     <div className="flex justify-end gap-2 pt-2">
@@ -265,13 +342,13 @@ export function ImageUploadExtractor({
                         </Button>
                         <Button
                             onClick={handleExtract}
-                            disabled={!file || loading}
+                            disabled={files.length === 0 || loading}
                             className="gradient-primary text-white gap-2 min-w-30"
                         >
                             {loading ? (
                                 <>
                                     <Loader2 className="h-4 w-4 animate-spin" />
-                                    Analyzing...
+                                    {statusText || 'Analyzing...'}
                                 </>
                             ) : (
                                 <>

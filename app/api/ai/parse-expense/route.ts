@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { geminiModel } from '@/lib/gemini'
+import { generateText } from '@/lib/gemini'
 import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/api-utils'
 
 export async function POST(req: NextRequest) {
@@ -35,8 +35,7 @@ Return ONLY valid JSON:
 {"amount": number|null, "description": string, "category": string, "date": string|null}
 `
 
-        const result = await geminiModel.generateContent(prompt)
-        const responseText = result.response.text()
+        const responseText = await generateText(prompt)
 
         // Clean markdown if present
         const cleanedText = responseText

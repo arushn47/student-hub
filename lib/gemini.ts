@@ -1,37 +1,13 @@
 import { GoogleGenerativeAI, Part } from '@google/generative-ai'
 import { jsonrepair } from 'jsonrepair'
-import { validateServerEnv } from '@/lib/env'
-import { aiLimiter } from '@/lib/ai/limiter'
 
-validateServerEnv()
+const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'] as const
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-
-export const geminiModel = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
-})
-
-const geminiFallbackModel = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-})
-
-const geminiJsonModel = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
-    generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.2,
-        maxOutputTokens: 4096,
-    },
-})
-
-const geminiJsonFallbackModel = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.2,
-        maxOutputTokens: 4096,
-    },
-})
+function getClient(): GoogleGenerativeAI {
+    const key = process.env.GEMINI_API_KEY
+    if (!key) throw new Error('GEMINI_API_KEY is not configured')
+    return new GoogleGenerativeAI(key)
+}
 
 export class GeminiRateLimitError extends Error {
     status = 429 as const
@@ -50,70 +26,111 @@ export interface GenerateTextResult {
     model: string
 }
 
+/** Whether a Gemini API key is configured. */
+export function hasKey(): boolean {
+    return !!process.env.GEMINI_API_KEY
+}
+
+/** Check if an error is retryable (429 quota / 503 overload). */
+function isRetryableError(err: unknown): boolean {
+    const status = (err as { status?: number })?.status
+    const msg = err instanceof Error ? err.message : ''
+    return (
+        status === 429 || status === 503 ||
+        msg.includes('429') || msg.includes('503') ||
+        msg.toLowerCase().includes('overloaded') ||
+        msg.toLowerCase().includes('high demand') ||
+        msg.toLowerCase().includes('quota')
+    )
+}
+
+/**
+ * Try calling `fn` with each model in MODELS order.
+ * Falls back to the next model on 429/503 errors.
+ */
+async function withModelFallback<T>(
+    fn: (model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>, modelName: string) => Promise<T>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    config?: Record<string, any>
+): Promise<T> {
+    const client = getClient()
+    let lastErr: unknown = null
+
+    for (let i = 0; i < MODELS.length; i++) {
+        const modelName = MODELS[i]
+        try {
+            const model = config
+                ? client.getGenerativeModel({ model: modelName, generationConfig: config })
+                : client.getGenerativeModel({ model: modelName })
+            console.log(`Using model: ${modelName}`)
+            const result = await fn(model, modelName)
+            return result
+        } catch (err) {
+            lastErr = err
+            if (isRetryableError(err) && i < MODELS.length - 1) {
+                console.warn(`Model ${modelName} failed (${(err as { status?: number })?.status || 'quota/overload'}), falling back to ${MODELS[i + 1]}...`)
+                continue
+            }
+            throw err
+        }
+    }
+
+    throw lastErr
+}
+
 export async function generateTextWithMeta(prompt: string | (string | Part)[]): Promise<GenerateTextResult> {
     try {
-        const result = await aiLimiter.run(() => geminiModel.generateContent(prompt))
-        return {
-            text: result.response.text(),
-            tokensUsed: result.response.usageMetadata?.totalTokenCount ?? null,
-            model: 'gemini-2.5-flash',
-        }
+        return await withModelFallback(async (model, modelName) => {
+            const result = await model.generateContent(prompt)
+            return {
+                text: result.response.text(),
+                tokensUsed: result.response.usageMetadata?.totalTokenCount ?? null,
+                model: modelName,
+            }
+        })
     } catch (error) {
         const classified = classifyGeminiError(error)
-        if (classified instanceof GeminiRateLimitError) {
-            try {
-                const result = await geminiFallbackModel.generateContent(prompt)
-                return {
-                    text: result.response.text(),
-                    tokensUsed: result.response.usageMetadata?.totalTokenCount ?? null,
-                    model: 'gemini-2.0-flash',
-                }
-            } catch (fallbackErr) {
-                throw classifyGeminiError(fallbackErr)
-            }
-        }
         console.error('Gemini API Error:', error)
-        throw new Error('Failed to generate AI response. Please try again.')
+        throw classified
     }
 }
 
 export async function generateText(prompt: string | (string | Part)[]): Promise<string> {
     try {
-        const result = await aiLimiter.run(() => geminiModel.generateContent(prompt))
-        return result.response.text()
+        return await withModelFallback(async (model) => {
+            const result = await model.generateContent(prompt)
+            return result.response.text()
+        })
     } catch (error) {
         const classified = classifyGeminiError(error)
-        if (classified instanceof GeminiRateLimitError) {
-            // Try fallback model once
-            try {
-                const result = await geminiFallbackModel.generateContent(prompt)
-                return result.response.text()
-            } catch (fallbackErr) {
-                throw classifyGeminiError(fallbackErr)
-            }
-        }
         console.error('Gemini API Error:', error)
-        throw new Error('Failed to generate AI response. Please try again.')
+        throw classified
     }
+}
+
+const JSON_CONFIG = {
+    responseMimeType: 'application/json',
+    temperature: 0.2,
+    maxOutputTokens: 4096,
 }
 
 export async function generateJSON<T>(prompt: string | (string | Part)[]): Promise<T> {
     try {
-        const result = await aiLimiter.run(() => geminiJsonModel.generateContent(prompt))
-        const text = result.response.text()
-        // Clean up the response - remove markdown code blocks if present
-        const cleanedText = text
-            .replace(/```json\n?/g, '')
-            .replace(/```\n?/g, '')
-            .trim()
+        return await withModelFallback(async (model) => {
+            const result = await model.generateContent(prompt)
+            const text = result.response.text()
+            const cleanedText = text
+                .replace(/```json\n?/g, '')
+                .replace(/```\n?/g, '')
+                .trim()
 
-        const candidate = extractJsonObject(cleanedText)
-        const parsed = tryParseJson<T>(candidate)
-        if (parsed !== null) return parsed
+            const candidate = extractJsonObject(cleanedText)
+            const parsed = tryParseJson<T>(candidate)
+            if (parsed !== null) return parsed
 
-        // One retry: ask the model to output syntactically valid JSON only.
-        const clipped = candidate.length > 30000 ? candidate.slice(0, 30000) : candidate
-        const fixPrompt = `Fix the following to be STRICTLY valid JSON.
+            // One retry: ask the model to output syntactically valid JSON only.
+            const clipped = candidate.length > 30000 ? candidate.slice(0, 30000) : candidate
+            const fixPrompt = `Fix the following to be STRICTLY valid JSON.
 
 Rules:
 - Output ONLY the JSON object (no markdown, no explanations).
@@ -122,52 +139,46 @@ Rules:
 Input:
 ${clipped}`
 
-        const fixed = await geminiJsonModel.generateContent(fixPrompt)
-        const fixedText = extractJsonObject(
-            fixed.response
-                .text()
-                .replace(/```json\n?/g, '')
-                .replace(/```\n?/g, '')
-                .trim()
-        )
-
-        const parsedFixed = tryParseJson<T>(fixedText)
-        if (parsedFixed !== null) return parsedFixed
-
-        throw new Error('Model did not return valid JSON after repair/retry')
-    } catch (error) {
-        const classified = classifyGeminiError(error)
-        if (classified instanceof GeminiRateLimitError) {
-            // Try fallback JSON model once
-            try {
-                const result = await geminiJsonFallbackModel.generateContent(prompt)
-                const text = result.response.text()
-                const cleanedText = text
+            const fixed = await model.generateContent(fixPrompt)
+            const fixedText = extractJsonObject(
+                fixed.response
+                    .text()
                     .replace(/```json\n?/g, '')
                     .replace(/```\n?/g, '')
                     .trim()
+            )
 
-                const candidate = extractJsonObject(cleanedText)
-                const parsed = tryParseJson<T>(candidate)
-                if (parsed !== null) return parsed
+            const parsedFixed = tryParseJson<T>(fixedText)
+            if (parsedFixed !== null) return parsedFixed
 
-                throw new Error('Fallback model did not return valid JSON')
-            } catch (fallbackErr) {
-                throw classifyGeminiError(fallbackErr)
-            }
-        }
-
+            throw new Error('Model did not return valid JSON after repair/retry')
+        }, JSON_CONFIG)
+    } catch (error) {
+        const classified = classifyGeminiError(error)
         console.error('Gemini API Error:', error)
-        // Never leak raw SDK errors to the client
-        if (classified instanceof GeminiRateLimitError) {
-            throw classified
-        }
-        throw new Error('Failed to generate AI response. Please try again.')
+        throw classified
     }
 }
 
+/**
+ * Direct model call for extract route — tries 2.5-flash then 2.0-flash.
+ */
+export async function generateContent(
+    promptContent: string | (string | Part)[],
+    timeoutMs: number = 55000
+) {
+    return withModelFallback(async (model, modelName) => {
+        console.log(`Extraction with ${modelName}`)
+        return Promise.race([
+            model.generateContent(promptContent),
+            new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('AI request timed out')), timeoutMs)
+            ),
+        ])
+    })
+}
+
 function classifyGeminiError(error: unknown): Error {
-    // The SDK throws an Error that may have status/statusText/errorDetails.
     const anyErr = error as { status?: number; message?: string; errorDetails?: unknown[] }
     const rawMessage = typeof anyErr?.message === 'string' ? anyErr.message : 'Gemini request failed'
 
@@ -176,7 +187,6 @@ function classifyGeminiError(error: unknown): Error {
         return new GeminiRateLimitError(rawMessage, retryAfter)
     }
 
-    // Wrap all other errors with a safe, non-leaking message
     return new Error('Failed to generate AI response. Please try again.')
 }
 
@@ -193,7 +203,6 @@ function extractRetryAfterSeconds(errorDetails?: unknown[]): number | undefined 
 }
 
 function extractJsonObject(text: string): string {
-    // Prefer the first complete JSON object in the response.
     const start = text.indexOf('{')
     const end = text.lastIndexOf('}')
     if (start !== -1 && end !== -1 && end > start) {
