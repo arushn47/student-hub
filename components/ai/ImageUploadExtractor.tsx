@@ -138,6 +138,18 @@ export function ImageUploadExtractor({
             setLoading(true)
             const hasPdf = files.some(f => f.type === 'application/pdf')
 
+            // Client-side PDF parsing for grades — no API call needed
+            if (type === 'grades' && hasPdf && files[0]?.type === 'application/pdf') {
+                setStatusText('Parsing PDF...')
+                const { parseGradesPDF } = await import('@/lib/pdf-parser')
+                const data = await parseGradesPDF(files[0])
+                onExtract(data)
+                setOpen(false)
+                reset()
+                toast.success('Grades extracted successfully!')
+                return
+            }
+
             let response: Response
 
             if (hasPdf) {

@@ -716,7 +716,7 @@ export default function GradesPage() {
                                         return {
                                             user_id: user.id,
                                             name: c.name || 'Unknown Course',
-                                            credits: c.credits || 3,
+                                            credits: c.credits ?? 3,
                                             grade: grade,
                                             semester: c.semester || 'Imported',
                                             category: c.category || 'none'
