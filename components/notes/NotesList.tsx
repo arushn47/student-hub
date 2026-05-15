@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useId, useMemo, useRef } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -200,8 +200,7 @@ export function NotesList({ initialNotes }: NotesListProps) {
     const [activeFilter, setActiveFilter] = useState<'all' | 'pinned'>('all')
     const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; note: Note | null }>({ open: false, note: null })
     const router = useRouter()
-    const supabase = createClient()
-    const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+        const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
     useEffect(() => {
         let cancelled = false

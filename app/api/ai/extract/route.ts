@@ -68,17 +68,17 @@ export async function POST(req: NextRequest) {
             case 'grades':
                 const categoryMappingInstructions = `
 IMPORTANT - CATEGORY MAPPING (Course Distribution):
-If the text/image includes a "Course Distribution" or similar column (like PC, UCNS, NMC, etc.), map it exactly to ONE of these specific categories:
+If the text/image includes a "Course Distribution" or similar column (like PC, UCNSC, NMC, etc.), map it exactly to ONE of these specific categories. Pay close attention to split letters like "C" or "MC" on the next line (e.g. UCBES + C = UCBESC):
 - "Programme Core" (if PC)
 - "Programme Elective" (if PE)
-- "University Core - Natural Science" (if UCNS)
-- "University Core - Engineering Sciences" (if UCBES or UCES)
-- "University Core - Skill Development" (if UCSD)
-- "University Core - Humanities & Social Science" (if UCHSS)
+- "University Core - Natural Science" (if UCNS or UCNSC)
+- "University Core - Engineering Sciences" (if UCBES, UCES, or UCBESC)
+- "University Core - Skill Development" (if UCSD or UCSDC)
+- "University Core - Humanities & Social Science" (if UCHSS or UCHSSMC)
 - "University Core - Project & Internships" (if UCPI)
 - "University Elective - Natural Science" (if UENS or UENSE)
 - "University Elective - Multidisciplinary" (if UEM)
-- "University Elective - Humanities & Social" (if UEHSS)
+- "University Elective - Humanities & Social" (if UEHSS or UEHSSME)
 - "University Elective - Open Electives" (if UEOE or OE)
 - "Non-Graded Mandatory Courses" (if NMC)
 If no mapping matches, omit the category or make your best guess.`;
@@ -91,13 +91,16 @@ IMPORTANT - SEMESTER MAPPING:
   - Example: Jan-2024 -> "Semester 1", Apr-2024 -> "Semester 2", Aug-2024 -> "Semester 3"
 - If explicit semester info exists (e.g., "Fall 2024"), keep as-is
 
-For VIT India grades: O/S = 10, A = 9, B = 8, C = 7, D = 6, E = 5, F = 0`;
+For VIT Bhopal, India grades: S = 10, A = 9, B = 8, C = 7, D = 6, E = 5, F = 0`;
+
+                const strictExtractionInstructions = `
+CRITICAL: Do not omit any row. Extraction is considered failed if any table row is skipped. You must extract EVERY SINGLE COURSE listed in the grade report.`;
 
                 systemPrompt = hasOcrText
-                    ? `Analyze this OCR-extracted text from a grade report. Extract ALL courses with their grades, credits, semester, AND category.\n${semesterMappingInstructions}\n${categoryMappingInstructions}\n\nOCR TEXT:\n${text}`
-                    : `Analyze this image of a grade report. Extract ALL courses with their grades, credits, semester, AND category.\n${semesterMappingInstructions}\n${categoryMappingInstructions}`;
-                
-                jsonSchema = 'Return JSON: { "courses": [{ "name": "string (course title)", "grade": "string (S/A/B/C/D/E/F/O)", "credits": number, "semester": "string (e.g. Semester 1, Semester 2)", "category": "string (Mapped category, default none)" }] }'
+                    ? `Analyze this OCR-extracted text from a grade report.\n${strictExtractionInstructions}\n\nExtract the courses with their grades, credits, semester, AND category.\n${semesterMappingInstructions}\n${categoryMappingInstructions}\n\nOCR TEXT:\n${text}`
+                    : `Analyze this image of a grade report.\n${strictExtractionInstructions}\n\nExtract the courses with their grades, credits, semester, AND category.\n${semesterMappingInstructions}\n${categoryMappingInstructions}`;
+
+                jsonSchema = 'Return JSON: { "courses": [{ "name": "string (course title from Course Title column)", "code": "string (course code from Course Code column)", "courseType": "string (from Course Type column, e.g. LTP, LT)", "grade": "string (S/A/B/C/D/E/F/O/P from Grade column)", "credits": number (from Credits column), "semester": "string (e.g. Semester 1, Semester 2 based on Exam Month)", "category": "string (Mapped category, default none)", "examMonth": "string (from Exam Month column)" }] }'
                 break
             case 'flashcards':
                 systemPrompt = hasOcrText
@@ -202,7 +205,7 @@ For EACH course (in the same order provided), return a difficulty rating.`
             console.log(`Using image path (${files.length} file(s)) for type: ${type}`)
         }
 
-        // Try gemini-2.5-flash first, fallback to 2.0-flash on 429/503
+        // Use gemini-2.5-flash for extraction
         result = await generateContent(promptContent, 55000)
 
         if (!result || !result.response) {
@@ -267,6 +270,13 @@ For EACH course (in the same order provided), return a difficulty rating.`
             )
         }
 
-        return NextResponse.json({ error: errorMessage || 'Failed to process file. Please try again.' }, { status: 500 })
+        return NextResponse.json({ 
+            error: {
+                message: errorMessage === 'fetch failed' ? 'Network connection failed. This is usually an ISP issue (Jio/IPv6).' : errorMessage,
+                details: (error as any)?.details || null,
+                hint: (error as any)?.hint || null,
+                code: (error as any)?.code || null
+            } 
+        }, { status: 500 })
     }
 }

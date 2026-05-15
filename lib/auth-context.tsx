@@ -1,10 +1,18 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { LoginRequiredDialog } from '@/components/ui/LoginRequiredDialog'
 import { User } from '@supabase/supabase-js'
 import type { UserRole } from '@/lib/rbac'
+
+function isAbortError(error: unknown) {
+    return error instanceof DOMException && error.name === 'AbortError'
+}
+
+function isNetworkFetchError(error: unknown) {
+    return error instanceof TypeError && /failed to fetch/i.test(error.message)
+}
 
 interface AuthContextType {
     user: User | null
@@ -39,27 +47,42 @@ export function AuthProvider({
             return
         }
 
-        const supabase = createClient()
-        supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single()
-            .then(({ data }) => {
-                if (data?.role) {
-                    setRole(data.role as UserRole)
-                }
-            })
+                let cancelled = false
+        void (async () => {
+            try {
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', user.id)
+                    .single()
+
+                if (cancelled) return
+                if (data?.role) setRole(data.role as UserRole)
+            } catch {
+                // Network issues shouldn't crash auth context.
+            }
+        })()
+
+        return () => {
+            cancelled = true
+        }
     }, [user])
 
     // Listen for auth state changes (e.g. OAuth login, logout)
     useEffect(() => {
-        const supabase = createClient()
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            if (session?.user) {
-                setUser(session.user)
-            } else if (event === 'SIGNED_OUT') {
+                const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
+            if (event === 'SIGNED_OUT') {
                 setUser(null)
+                return
+            }
+
+            // Avoid using session.user (can be insecure per Supabase warning).
+            try {
+                const { data, error } = await supabase.auth.getUser()
+                if (!error) setUser(data.user)
+            } catch (e) {
+                // If auth server is unreachable, keep current state.
+                if (isAbortError(e) || isNetworkFetchError(e)) return
             }
         })
 
@@ -77,10 +100,9 @@ export function AuthProvider({
         // Double check with fresh auth state
         setIsLoading(true)
         try {
-            const supabase = createClient()
-            const { data: { user: freshUser } } = await supabase.auth.getUser()
-            if (freshUser) {
-                setUser(freshUser)
+                        const { data, error } = await supabase.auth.getUser()
+            if (!error && data.user) {
+                setUser(data.user)
                 return true
             }
         } catch {

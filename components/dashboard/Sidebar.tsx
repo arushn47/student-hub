@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -222,8 +222,7 @@ export function Sidebar({ user }: SidebarProps) {
     const [collapsed, setCollapsed] = useState(false)
     const pathname = usePathname()
     const router = useRouter()
-    const supabase = createClient()
-    const { isAdmin } = useAuth()
+        const { isAdmin } = useAuth()
     const { isEnabled: isFeatureEnabled } = useFeatureFlags()
 
     const handleLogout = async () => {
@@ -389,8 +388,7 @@ export function MobileSidebar({ user }: SidebarProps) {
     const [open, setOpen] = useState(false)
     const pathname = usePathname()
     const router = useRouter()
-    const supabase = createClient()
-    const { isAdmin } = useAuth()
+        const { isAdmin } = useAuth()
     const { isEnabled: isFeatureEnabled } = useFeatureFlags()
 
     const handleLogout = async () => {

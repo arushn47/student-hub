@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -36,8 +36,7 @@ export function GroupChat({ groupId, assignmentTitle, onClose }: GroupChatProps)
     const [sending, setSending] = useState(false)
     const [currentUserId, setCurrentUserId] = useState<string | null>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
-    const supabase = createClient()
-
+    
     const fetchMessages = useCallback(async () => {
         try {
             const res = await fetch(`/api/assignments/groups/messages?groupId=${groupId}`)

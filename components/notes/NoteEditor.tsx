@@ -7,7 +7,7 @@ import TaskItem from '@tiptap/extension-task-item'
 import Placeholder from '@tiptap/extension-placeholder'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import ReactMarkdown from 'react-markdown'
@@ -61,8 +61,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
         answers: [],
     })
     const router = useRouter()
-    const supabase = createClient()
-
+    
     const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const editor = useEditor({
@@ -241,8 +240,7 @@ export function NoteEditor({ note: initialNote }: NoteEditorProps) {
 
         if (isDefaultTitle && isEmptyContent) {
             try {
-                const supabase = createClient()
-                await supabase.from('notes').delete().eq('id', note.id)
+                                await supabase.from('notes').delete().eq('id', note.id)
             } catch (error) {
                 console.error('Failed to auto-delete empty note:', error)
             }

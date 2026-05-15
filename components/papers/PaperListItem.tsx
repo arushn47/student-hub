@@ -1,9 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Dialog, DialogContent, DialogTrigger, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { FileText, Eye, Download, Calendar, Folder, GraduationCap, Clock, Trash2, Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
+import { FileText, Eye, Download, Calendar, GraduationCap, Trash2, Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { Badge } from "@/components/ui/badge"
 import { toast } from 'sonner'
+import { normalizePaperExamType } from '@/lib/papers'
 
 interface PaperListItemProps {
     paper: {
@@ -26,6 +27,7 @@ export function PaperListItem({ paper, currentUserId, isAdmin, onDelete }: Paper
     const [confirmOpen, setConfirmOpen] = useState(false)
     const [zoom, setZoom] = useState(1)
     const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null)
+    const [imageError, setImageError] = useState(false)
     const scrollRef = useRef<HTMLDivElement>(null)
 
     // Scroll wheel → zoom (non-passive so we can block page scroll)
@@ -58,6 +60,9 @@ export function PaperListItem({ paper, currentUserId, isAdmin, onDelete }: Paper
 
     const canDelete = isAdmin || (currentUserId && paper.uploaded_by === currentUserId)
 
+    const displayExamType = normalizePaperExamType(paper.exam_type) ?? paper.exam_type
+    const displayTitle = `${paper.subject} - ${displayExamType || 'Exam'} (${paper.year})`
+
     const handleDelete = async () => {
         if (!onDelete) return
         setDeleting(true)
@@ -75,7 +80,7 @@ export function PaperListItem({ paper, currentUserId, isAdmin, onDelete }: Paper
     return (
         <div className="group relative overflow-hidden bg-black/40 hover:bg-white/5 border border-white/5 hover:border-purple-500/20 rounded-xl transition-all duration-300">
             {/* Hover decorative gradient */}
-            <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/0 to-purple-500/0 group-hover:via-purple-500/5 transition-all duration-500" />
+            <div className="absolute inset-0 bg-linear-to-r from-purple-500/0 via-purple-500/0 to-purple-500/0 group-hover:via-purple-500/5 transition-all duration-500" />
 
             <div className="relative p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-start gap-4">
@@ -90,7 +95,7 @@ export function PaperListItem({ paper, currentUserId, isAdmin, onDelete }: Paper
                                 {paper.subject}
                             </h3>
                             <Badge variant="outline" className="text-xs font-normal bg-purple-500/10 text-purple-400 border-purple-500/20">
-                                {paper.exam_type || 'Exam'}
+                                {displayExamType || 'Exam'}
                             </Badge>
                         </div>
 
@@ -110,7 +115,7 @@ export function PaperListItem({ paper, currentUserId, isAdmin, onDelete }: Paper
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 shrink-0 border-t sm:border-t-0 border-white/5 pt-3 sm:pt-0 mt-2 sm:mt-0">
-                    <Dialog onOpenChange={(open) => { if (open) setZoom(1) }}>
+                    <Dialog onOpenChange={(open) => { if (open) { setZoom(1); setImageError(false) } }}>
                         <DialogTrigger asChild>
                             <Button variant="outline" size="sm" className="bg-black/20 border-white/10 hover:bg-white/10 hover:text-white gap-2 transition-all">
                                 <Eye className="h-4 w-4" />
@@ -118,11 +123,11 @@ export function PaperListItem({ paper, currentUserId, isAdmin, onDelete }: Paper
                             </Button>
                         </DialogTrigger>
                         <DialogContent className="w-[95vw] h-[85vh] max-w-none sm:max-w-6xl p-0 gap-0 bg-gray-950 border-white/10 flex flex-col overflow-hidden outline-none sm:rounded-xl">
-                            <div className="h-14 min-h-[3.5rem] px-4 border-b border-white/10 flex justify-between items-center bg-gray-900/50 backdrop-blur-sm z-10 shrink-0">
+                            <div className="h-14 min-h-14 px-4 border-b border-white/10 flex justify-between items-center bg-gray-900/50 backdrop-blur-sm z-10 shrink-0">
                                 <div className="flex items-center gap-2 overflow-hidden">
                                     <FileText className="h-5 w-5 text-purple-400 shrink-0" />
                                     <DialogTitle className="font-medium text-sm sm:text-base truncate text-gray-200 m-0">
-                                        {paper.title}
+                                        {displayTitle}
                                     </DialogTitle>
                                 </div>
                                 <Button size="sm" className="bg-white text-black hover:bg-gray-200 shrink-0" onClick={() => window.open(paper.file_url || '', '_blank')}>
@@ -136,7 +141,7 @@ export function PaperListItem({ paper, currentUserId, isAdmin, onDelete }: Paper
                                         <iframe
                                             src={`https://docs.google.com/viewer?url=${encodeURIComponent(paper.file_url)}&embedded=true`}
                                             className="w-full h-full border-0 absolute inset-0"
-                                            title={paper.title}
+                                            title={displayTitle}
                                         />
                                     ) : (
                                         <div className="w-full h-full bg-black/50 relative">
@@ -184,35 +189,44 @@ export function PaperListItem({ paper, currentUserId, isAdmin, onDelete }: Paper
                                                     position: 'relative',
                                                 } : { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                    <img
-                                                        src={paper.file_url}
-                                                        alt={paper.title}
-                                                        className="shadow-2xl absolute"
-                                                        style={imgSize ? {
-                                                            left: '50%',
-                                                            top: '50%',
-                                                            transform: `translate(-50%, -50%) scale(${zoom})`,
-                                                            width: imgSize.w,
-                                                            height: imgSize.h,
-                                                        } : {
-                                                            maxWidth: '100%',
-                                                            maxHeight: '100%',
-                                                            objectFit: 'contain' as const,
-                                                        }}
-                                                        draggable={false}
-                                                        onLoad={(e) => {
-                                                            const img = e.currentTarget
-                                                            const container = scrollRef.current
-                                                            if (!container) return
-                                                            const cw = container.clientWidth
-                                                            const ch = container.clientHeight
-                                                            const scale = Math.min(cw / img.naturalWidth, ch / img.naturalHeight, 1)
-                                                            setImgSize({
-                                                                w: img.naturalWidth * scale,
-                                                                h: img.naturalHeight * scale,
-                                                            })
-                                                        }}
-                                                    />
+                                                    {imageError ? (
+                                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 gap-2">
+                                                            <FileText className="h-12 w-12 opacity-20" />
+                                                            <p className="text-sm">Preview failed to load</p>
+                                                        </div>
+                                                    ) : (
+                                                        // eslint-disable-next-line @next/next/no-img-element
+                                                        <img
+                                                            src={paper.file_url}
+                                                            alt={displayTitle}
+                                                            className="shadow-2xl absolute"
+                                                            style={imgSize ? {
+                                                                left: '50%',
+                                                                top: '50%',
+                                                                transform: `translate(-50%, -50%) scale(${zoom})`,
+                                                                width: imgSize.w,
+                                                                height: imgSize.h,
+                                                            } : {
+                                                                maxWidth: '100%',
+                                                                maxHeight: '100%',
+                                                                objectFit: 'contain' as const,
+                                                            }}
+                                                            draggable={false}
+                                                            onError={() => setImageError(true)}
+                                                            onLoad={(e) => {
+                                                                const img = e.currentTarget
+                                                                const container = scrollRef.current
+                                                                if (!container) return
+                                                                const cw = container.clientWidth
+                                                                const ch = container.clientHeight
+                                                                const scale = Math.min(cw / img.naturalWidth, ch / img.naturalHeight, 1)
+                                                                setImgSize({
+                                                                    w: img.naturalWidth * scale,
+                                                                    h: img.naturalHeight * scale,
+                                                                })
+                                                            }}
+                                                        />
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

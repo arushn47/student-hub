@@ -4,9 +4,8 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Upload, X, Loader2, Sparkles, Clipboard } from 'lucide-react'
+import { Upload, X, Loader2, Sparkles, Clipboard, Cpu } from 'lucide-react'
 import { toast } from 'sonner'
-import { extractTextFromImages } from '@/lib/ocr'
 
 interface ImageUploadExtractorProps {
     type: 'grades' | 'flashcards' | 'timetable' | 'expenses'
@@ -28,6 +27,7 @@ export function ImageUploadExtractor({
     const [selectedImages, setSelectedImages] = useState<string[]>([])
     const [files, setFiles] = useState<File[]>([])
     const [loading, setLoading] = useState(false)
+    const [useLocal, setUseLocal] = useState(false)
     const [statusText, setStatusText] = useState('')
     const [isDragging, setIsDragging] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -137,79 +137,77 @@ export function ImageUploadExtractor({
         try {
             setLoading(true)
             const hasPdf = files.some(f => f.type === 'application/pdf')
-
-            // Client-side PDF parsing for grades — no API call needed
-            if (type === 'grades' && hasPdf && files[0]?.type === 'application/pdf') {
-                setStatusText('Parsing PDF...')
-                const { parseGradesPDF } = await import('@/lib/pdf-parser')
-                const data = await parseGradesPDF(files[0])
-                onExtract(data)
-                setOpen(false)
-                reset()
-                toast.success('Grades extracted successfully!')
-                return
-            }
-
-            let response: Response
-
-            if (hasPdf) {
-                // PDFs can't be OCR'd client-side — send directly to Gemini vision
-                setStatusText('Uploading PDF...')
-                const formData = new FormData()
-                files.forEach(f => formData.append('image', f))
-                formData.append('type', type)
-
-                response = await fetch('/api/ai/extract', {
-                    method: 'POST',
-                    body: formData,
-                })
-            } else {
-                // Images: run OCR client-side first, then send text to API
-                setStatusText('Reading text from image...')
-                const ocrText = await extractTextFromImages(files, (progress) => {
-                    setStatusText(`Reading text... ${progress}%`)
-                })
-
-                if (ocrText && ocrText.trim().length > 20) {
-                    // OCR produced meaningful text — send as text (saves quota)
-                    setStatusText('Extracting data...')
-                    response = await fetch('/api/ai/extract', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ type, text: ocrText }),
-                    })
-                } else {
-                    // OCR produced too little text — fall back to image upload
-                    setStatusText('Uploading image to AI...')
-                    const formData = new FormData()
-                    files.forEach(f => formData.append('image', f))
-                    formData.append('type', type)
-
-                    response = await fetch('/api/ai/extract', {
-                        method: 'POST',
-                        body: formData,
-                    })
+            // Client-side PDF parsing for grades or timetable — no API call needed (INSTANT)
+            if (hasPdf && files[0]?.type === 'application/pdf') {
+                if (type === 'grades') {
+                    setStatusText('Parsing PDF locally...')
+                    const { parseGradesPDF } = await import('@/lib/pdf-parser')
+                    const data = await parseGradesPDF(files[0])
+                    onExtract(data)
+                    setOpen(false)
+                    reset()
+                    toast.success('Grades extracted instantly!')
+                    return
+                }
+                
+                if (type === 'timetable') {
+                    setStatusText('Parsing PDF locally...')
+                    const { parseTimetablePDF } = await import('@/lib/pdf-parser')
+                    const data = await parseTimetablePDF(files[0])
+                    onExtract(data)
+                    setOpen(false)
+                    reset()
+                    toast.success('Timetable extracted instantly!')
+                    return
                 }
             }
 
+            // Offline Image OCR for Timetable
+            if (useLocal && type === 'timetable' && files.length > 0 && files[0]?.type.startsWith('image/')) {
+                setStatusText('Performing local OCR...')
+                try {
+                    const { parseTimetableImage } = await import('@/lib/ocr-parser')
+                    const data = await parseTimetableImage(files[0])
+                    if (data.classes.length > 0) {
+                        onExtract(data)
+                        setOpen(false)
+                        reset()
+                        toast.success('Data extracted locally via OCR!')
+                    } else {
+                        toast.error('Local OCR found no classes. Try AI mode instead.')
+                    }
+                    return
+                } catch (err) {
+                    console.error('Local OCR failed:', err)
+                    toast.error('Local OCR failed. Switching to AI...')
+                    // Fall through to AI
+                }
+            }
+
+            setStatusText(hasPdf ? 'Uploading PDF...' : 'Uploading image to AI...')
+            const formData = new FormData()
+            files.forEach(f => formData.append('image', f))
+            formData.append('type', type)
+
+            const response = await fetch('/api/ai/extract', {
+                method: 'POST',
+                body: formData,
+            })
+
             if (!response.ok) {
-                // Try to extract a meaningful error message
                 let errMsg = `Server error (${response.status})`
                 try {
                     const result = await response.json()
-                    if (typeof result.error === 'string') {
-                        errMsg = result.error
-                    } else if (result.error?.message) {
-                        errMsg = result.error.message
-                    } else if (result.message) {
-                        errMsg = result.message
-                    } else if (typeof result === 'object') {
-                        errMsg = JSON.stringify(result)
+                    const errorObj = result.error || result
+                    
+                    if (typeof errorObj === 'string') {
+                        errMsg = errorObj
+                    } else if (typeof errorObj === 'object' && errorObj !== null) {
+                        errMsg = errorObj.message || errorObj.details || JSON.stringify(errorObj)
                     }
                 } catch {
-                    // Response wasn't JSON (e.g. Vercel timeout HTML page)
                     if (response.status === 504) {
-                        errMsg = 'Request timed out. Try a smaller file.'
+                        errMsg = 'Request timed out. This is usually due to a slow network connection.'
                     }
                 }
                 throw new Error(errMsg)
@@ -343,32 +341,53 @@ export function ImageUploadExtractor({
                         multiple
                     />
 
-                    <div className="flex justify-end gap-2 pt-2">
-                        <Button
-                            variant="ghost"
-                            onClick={() => setOpen(false)}
-                            disabled={loading}
-                            className="text-gray-400 hover:text-white"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            onClick={handleExtract}
-                            disabled={files.length === 0 || loading}
-                            className="gradient-primary text-white gap-2 min-w-30"
-                        >
-                            {loading ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    {statusText || 'Analyzing...'}
-                                </>
-                            ) : (
-                                <>
-                                    <Sparkles className="h-4 w-4" />
-                                    Extract Data
-                                </>
-                            )}
-                        </Button>
+                    <div className="flex justify-between items-center pt-2">
+                        {type === 'timetable' && files.length > 0 && files[0]?.type !== 'application/pdf' && (
+                            <label className="flex items-center gap-2 cursor-pointer group">
+                                <div className="relative">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={useLocal}
+                                        onChange={(e) => setUseLocal(e.target.checked)}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-10 h-5 bg-white/5 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-500 after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-500 peer-checked:after:bg-white"></div>
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-xs font-medium text-gray-300 group-hover:text-violet-400 transition-colors flex items-center gap-1">
+                                        <Cpu className="h-3 w-3" /> Offline Mode
+                                    </span>
+                                    <span className="text-[10px] text-gray-500">Fast, local processing</span>
+                                </div>
+                            </label>
+                        )}
+                        <div className="flex gap-2 ml-auto">
+                            <Button
+                                variant="ghost"
+                                onClick={() => setOpen(false)}
+                                disabled={loading}
+                                className="text-gray-400 hover:text-white"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleExtract}
+                                disabled={files.length === 0 || loading}
+                                className="gradient-primary text-white gap-2 min-w-30"
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        {statusText || 'Analyzing...'}
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles className="h-4 w-4" />
+                                        Extract Data
+                                    </>
+                                )}
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </DialogContent>

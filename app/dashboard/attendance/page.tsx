@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -63,8 +63,7 @@ export default function AttendancePage() {
     const [selectedSemester, setSelectedSemester] = useState<string>('all')
     const [targetPercentage, setTargetPercentage] = useState<number>(75)
     const [weekOffset, setWeekOffset] = useState(0)
-    const supabase = useMemo(() => createClient(), [])
-
+    
     const today = useMemo(() => new Date(), [])
 
     const weekStart = useMemo(() => {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -74,12 +74,12 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
     const [breakdownDialog, setBreakdownDialog] = useState(false)
     const [breakdownInput, setBreakdownInput] = useState('')
     const [breakdownLoading, setBreakdownLoading] = useState(false)
-    const [newTask, setNewTask] = useState<{ title: string; description: string; priority: Task['priority']; due_date: string }>({
-        title: '', description: '', priority: 'medium', due_date: '',
+    const [newTask, setNewTask] = useState<{ title: string; description: string; priority: Task['priority']; due_date: string; due_time: string }>({
+        title: '', description: '', priority: 'medium', due_date: '', due_time: '',
     })
     const [editingTask, setEditingTask] = useState<Task | null>(null)
-    const [editTask, setEditTask] = useState<{ title: string; description: string; priority: Task['priority']; due_date: string; status: Task['status'] }>({
-        title: '', description: '', priority: 'medium', due_date: '', status: 'todo',
+    const [editTask, setEditTask] = useState<{ title: string; description: string; priority: Task['priority']; due_date: string; due_time: string; status: Task['status'] }>({
+        title: '', description: '', priority: 'medium', due_date: '', due_time: '', status: 'todo',
     })
     const [editSaving, setEditSaving] = useState(false)
     const [draggedTask, setDraggedTask] = useState<Task | null>(null)
@@ -87,8 +87,7 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
     const [googleConnected, setGoogleConnected] = useState(false)
     const [viewMode, setViewMode] = useState<'board' | 'list'>('board')
     const [listFilter, setListFilter] = useState<'all' | 'today' | 'week' | 'overdue'>('all')
-    const supabase = createClient()
-
+    
     const readJsonSafely = async <T,>(res: Response): Promise<T | null> => {
         try {
             return (await res.json()) as T
@@ -170,14 +169,22 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
 
     const createTask = async () => {
         if (!newTask.title.trim()) { toast.error('Title is required'); return }
+        
+        let combinedDueDate = null
+        if (newTask.due_date) {
+            combinedDueDate = newTask.due_time 
+                ? new Date(`${newTask.due_date}T${newTask.due_time}`).toISOString()
+                : new Date(newTask.due_date).toISOString()
+        }
+
         const { data, error } = await supabase.from('tasks').insert({
             user_id: userId, title: newTask.title, description: newTask.description || null,
-            priority: newTask.priority, due_date: newTask.due_date || null, status: 'todo',
+            priority: newTask.priority, due_date: combinedDueDate, status: 'todo',
         }).select().single()
         if (error) { toast.error('Failed to create task'); return }
         setTasks((prev) => [...prev, data as Task])
         setCreateDialog(false)
-        setNewTask({ title: '', description: '', priority: 'medium', due_date: '' })
+        setNewTask({ title: '', description: '', priority: 'medium', due_date: '', due_time: '' })
         toast.success('Task created')
         if (googleConnected && data) {
             try {
@@ -266,7 +273,7 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
     // List view filtering
     const filteredListTasks = tasks.filter(task => {
         if (listFilter === 'today') return task.due_date && isToday(new Date(task.due_date))
-        if (listFilter === 'week') return task.due_date && isThisWeek(new Date(task.due_date))
+        if (listFilter === 'week') return task.due_date && isThisWeek(new Date(task.due_date), { weekStartsOn: 1 })
         if (listFilter === 'overdue') return task.due_date && isPast(new Date(task.due_date)) && task.status !== 'done'
         return true
     }).sort((a, b) => {
@@ -281,11 +288,28 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
 
     const openEdit = (task: Task) => {
         setEditingTask(task)
+        
+        let datePart = ''
+        let timePart = ''
+        if (task.due_date) {
+            const date = new Date(task.due_date)
+            // Get local ISO string parts
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            const hours = String(date.getHours()).padStart(2, '0')
+            const mins = String(date.getMinutes()).padStart(2, '0')
+            
+            datePart = `${year}-${month}-${day}`
+            timePart = `${hours}:${mins}`
+        }
+
         setEditTask({
             title: task.title,
             description: task.description || '',
             priority: task.priority,
-            due_date: task.due_date || '',
+            due_date: datePart,
+            due_time: timePart,
             status: task.status,
         })
         setEditDialog(true)
@@ -300,11 +324,18 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
 
         setEditSaving(true)
         try {
+            let combinedDueDate = null
+            if (editTask.due_date) {
+                combinedDueDate = editTask.due_time 
+                    ? new Date(`${editTask.due_date}T${editTask.due_time}`).toISOString()
+                    : new Date(editTask.due_date).toISOString()
+            }
+
             const updates = {
                 title: editTask.title.trim(),
                 description: editTask.description?.trim() ? editTask.description.trim() : null,
                 priority: editTask.priority,
-                due_date: editTask.due_date || null,
+                due_date: combinedDueDate,
                 status: editTask.status,
                 updated_at: new Date().toISOString(),
             }
@@ -482,10 +513,10 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
                                                                 <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded border", p.badge)}>
                                                                     {p.label}
                                                                 </span>
-                                                                {task.due_date && (
+                                                                 {task.due_date && (
                                                                     <span className={cn("text-[10px] flex items-center gap-0.5", isOverdue ? "text-red-400" : "text-gray-600")}>
                                                                         <Calendar className="h-2.5 w-2.5" />
-                                                                        {format(new Date(task.due_date), 'MMM d')}
+                                                                        {format(new Date(task.due_date), 'MMM d, p')}
                                                                     </span>
                                                                 )}
                                                                 {task.google_task_id && (
@@ -561,7 +592,7 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
                                             {task.due_date && (
                                                 <span className={cn("text-[10px] flex items-center gap-1 sm:flex", isOverdue ? "text-red-400" : "text-gray-600")}>
                                                     <Calendar className="h-2.5 w-2.5" />
-                                                    {format(new Date(task.due_date), 'MMM d')}
+                                                    {format(new Date(task.due_date), 'MMM d, p')}
                                                 </span>
                                             )}
                                             <span className={cn("text-[10px] px-1.5 py-0.5 rounded border hidden sm:block", p.badge)}>
@@ -608,13 +639,18 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
                         </div>
                         <div className="space-y-1.5">
                             <Label className="text-gray-400 text-xs">Description <span className="text-gray-700">(optional)</span></Label>
-                            <Textarea
-                                value={editTask.description}
-                                onChange={(e) => setEditTask((prev) => ({ ...prev, description: e.target.value }))}
-                                placeholder="Add details..."
-                                className="bg-white/4 border-white/10 text-white resize-none text-sm"
-                                rows={2}
-                            />
+                            <div className="relative">
+                                <Textarea
+                                    value={editTask.description}
+                                    onChange={(e) => setEditTask((prev) => ({ ...prev, description: e.target.value }))}
+                                    placeholder="Add details..."
+                                    className="bg-white/4 border-white/10 text-white resize-none text-sm pr-10"
+                                    rows={2}
+                                />
+                                <div className="absolute right-2 top-2">
+                                    <SpeechToTextButton onTranscript={(text) => setEditTask((prev) => ({ ...prev, description: (prev.description || '') + text }))} />
+                                </div>
+                            </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1.5">
@@ -634,13 +670,21 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
                                 </Select>
                             </div>
                             <div className="space-y-1.5">
-                                <Label className="text-gray-400 text-xs">Due Date</Label>
-                                <Input
-                                    type="date"
-                                    value={editTask.due_date}
-                                    onChange={(e) => setEditTask((prev) => ({ ...prev, due_date: e.target.value }))}
-                                    className="bg-white/4 border-white/10 text-white text-sm h-9"
-                                />
+                                <Label className="text-gray-400 text-xs">Deadline</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        type="date"
+                                        value={editTask.due_date}
+                                        onChange={(e) => setEditTask((prev) => ({ ...prev, due_date: e.target.value }))}
+                                        className="bg-white/4 border-white/10 text-white text-sm h-9 flex-1"
+                                    />
+                                    <Input
+                                        type="time"
+                                        value={editTask.due_time}
+                                        onChange={(e) => setEditTask((prev) => ({ ...prev, due_time: e.target.value }))}
+                                        className="bg-white/4 border-white/10 text-white text-sm h-9 w-[120px]"
+                                    />
+                                </div>
                             </div>
                         </div>
                         <div className="space-y-1.5">
@@ -683,17 +727,19 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
                     <div className="space-y-4">
                         <div className="space-y-1.5">
                             <Label className="text-gray-400 text-xs">Title</Label>
-                            <div className="flex gap-2">
-                                <Input value={newTask.title} onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))}
-                                    placeholder="What needs to be done?" onKeyDown={(e) => e.key === 'Enter' && createTask()}
-                                    className="bg-white/4er-white/10 text-white text-sm flex-1" />
-                                <SpeechToTextButton onTranscript={(text) => setNewTask((prev) => ({ ...prev, title: prev.title + text }))} />
-                            </div>
+                            <Input value={newTask.title} onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))}
+                                placeholder="What needs to be done?" onKeyDown={(e) => e.key === 'Enter' && createTask()}
+                                className="bg-white/4 border-white/10 text-white text-sm" />
                         </div>
                         <div className="space-y-1.5">
                             <Label className="text-gray-400 text-xs">Description <span className="text-gray-700">(optional)</span></Label>
-                            <Textarea value={newTask.description} onChange={(e) => setNewTask((prev) => ({ ...prev, description: e.target.value }))}
-                                placeholder="Add details..." className="bg-white/4 border-white/10 text-white resize-none text-sm" rows={2} />
+                            <div className="relative">
+                                <Textarea value={newTask.description} onChange={(e) => setNewTask((prev) => ({ ...prev, description: e.target.value }))}
+                                    placeholder="Add details..." className="bg-white/4 border-white/10 text-white resize-none text-sm pr-10" rows={2} />
+                                <div className="absolute right-2 top-2">
+                                    <SpeechToTextButton onTranscript={(text) => setNewTask((prev) => ({ ...prev, description: (prev.description || '') + text }))} />
+                                </div>
+                            </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1.5">
@@ -710,9 +756,13 @@ export function TasksManager({ initialTasks, userId }: TasksManagerProps) {
                                 </Select>
                             </div>
                             <div className="space-y-1.5">
-                                <Label className="text-gray-400 text-xs">Due Date</Label>
-                                <Input type="date" value={newTask.due_date} onChange={(e) => setNewTask((prev) => ({ ...prev, due_date: e.target.value }))}
-                                    className="bg-white/4 border-white/10 text-white text-sm h-9" />
+                                <Label className="text-gray-400 text-xs">Deadline</Label>
+                                <div className="flex gap-2">
+                                    <Input type="date" value={newTask.due_date} onChange={(e) => setNewTask((prev) => ({ ...prev, due_date: e.target.value }))}
+                                        className="bg-white/4 border-white/10 text-white text-sm h-9 flex-1" />
+                                    <Input type="time" value={newTask.due_time} onChange={(e) => setNewTask((prev) => ({ ...prev, due_time: e.target.value }))}
+                                        className="bg-white/4 border-white/10 text-white text-sm h-9 w-[120px]" />
+                                </div>
                             </div>
                         </div>
                         <Button onClick={createTask} className="w-full bg-violet-600 hover:bg-violet-500 text-white text-sm">

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -77,8 +77,7 @@ export default function SemesterSettingsPage() {
         break_type: 'holiday' as SemesterBreak['break_type']
     })
 
-    const supabase = useMemo(() => createClient(), [])
-
+    
     const fetchData = useCallback(async () => {
         try {
             const { data: { user } } = await supabase.auth.getUser()

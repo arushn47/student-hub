@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { Sidebar, MobileSidebar } from '@/components/dashboard/Sidebar'
-import { StudyBuddyWidget } from '@/components/chat/StudyBuddyWidget'
 import { GoogleSyncProvider } from '@/components/providers/GoogleSyncProvider'
 import { AuthProvider } from '@/lib/auth-context'
 import Link from 'next/link'
@@ -12,7 +11,14 @@ export default async function DashboardLayout({
     children: React.ReactNode
 }) {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    let user = null
+    try {
+        const { data, error } = await supabase.auth.getUser()
+        if (!error) user = data.user
+    } catch {
+        // If auth server is unreachable (ISP/DNS issues), treat as guest.
+        user = null
+    }
 
     // Create a serializable user object for the client
     const serializedUser = user ? {
@@ -92,9 +98,6 @@ export default async function DashboardLayout({
 
                 {/* Background Google Sync */}
                 {user && <GoogleSyncProvider />}
-
-                {/* Study Buddy Chat Widget */}
-                <StudyBuddyWidget />
             </div>
         </AuthProvider>
     )

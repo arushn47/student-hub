@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,11 +19,12 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { Plus, Clock, Trash2, GraduationCap, Settings } from 'lucide-react'
-import type { ClassSchedule, Semester } from '@/types'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ImageUploadExtractor } from '@/components/ai/ImageUploadExtractor'
 import Link from 'next/link'
+import { ensureDefaultSemesters } from '@/lib/semester-utils'
+import type { ClassSchedule, Semester } from '@/types'
 
 interface TimetableGridProps {
     initialClasses: ClassSchedule[]
@@ -62,7 +63,9 @@ const colors = [
 export function TimetableGrid({ initialClasses, initialSemesters, userId }: TimetableGridProps) {
     const [classes, setClasses] = useState<ClassSchedule[]>(initialClasses)
     const [semesters, setSemesters] = useState<Semester[]>(initialSemesters)
-    const [selectedSemester, setSelectedSemester] = useState<string>('all')
+    const [selectedSemester, setSelectedSemester] = useState<string>(
+        initialSemesters.find(s => s.is_active)?.id || initialSemesters[0]?.id || ''
+    )
     const [createDialog, setCreateDialog] = useState(false)
     const [newClass, setNewClass] = useState({
         name: '',
@@ -74,8 +77,7 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
         start_time: '08:00',
         end_time: '09:00',
     })
-    const supabase = useMemo(() => createClient(), [])
-
+    
     // Auto-select active semester on mount
     useEffect(() => {
         const activeSemester = semesters.find(s => s.is_active)
@@ -112,8 +114,8 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
 
     // Filter classes by selected semester
     const filteredClasses = useMemo(() => {
-        if (selectedSemester === 'all') return classes
-        return classes.filter(c => c.semester_id === selectedSemester || c.semester_id === null)
+        if (!selectedSemester) return []
+        return classes.filter(c => c.semester_id === selectedSemester)
     }, [classes, selectedSemester])
 
     // Sync colors for all classes - ensures same subject has same color
@@ -206,7 +208,7 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
             .insert({
                 user_id: userId,
                 ...newClass,
-                semester_id: selectedSemester !== 'all' ? selectedSemester : null,
+                semester_id: selectedSemester,
             })
             .select()
             .single()
@@ -248,8 +250,7 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
 
         let query = supabase.from('class_schedules').delete().eq('user_id', userId)
 
-        // If a specific semester is selected, only clear that semester's classes
-        if (selectedSemester !== 'all') {
+        if (selectedSemester) {
             query = query.eq('semester_id', selectedSemester)
         }
 
@@ -305,10 +306,9 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
                         <GraduationCap className="h-4 w-4 text-muted-foreground" />
                         <Select value={selectedSemester} onValueChange={setSelectedSemester}>
                             <SelectTrigger className="w-40 bg-white/5 border-white/10">
-                                <SelectValue placeholder="All Semesters" />
+                                <SelectValue placeholder="Select Semester" />
                             </SelectTrigger>
                             <SelectContent className="bg-gray-900 border-white/10">
-                                <SelectItem value="all">All Semesters</SelectItem>
                                 {semesters.map((sem) => (
                                     <SelectItem key={sem.id} value={sem.id}>
                                         {sem.name} {sem.is_active && '✓'}
@@ -329,13 +329,18 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
                         className="text-red-400 border-red-500/30 hover:bg-red-500/10"
                     >
                         <Trash2 className="mr-2 h-4 w-4" />
-                        {selectedSemester !== 'all' ? 'Clear Semester' : 'Clear All'}
+                        Clear Semester
                     </Button>
                     <ImageUploadExtractor
                         type="timetable"
                         title="Extract Schedule"
                         description="Upload a picture of your class timetable."
                         onExtract={async (data) => {
+                            if (semesters.length === 0) {
+                                toast.error('Please create a semester first to organize your timetable.')
+                                return
+                            }
+
                             if (data.classes && Array.isArray(data.classes)) {
                                 try {
                                     const dayMap: Record<string, number> = {
@@ -349,7 +354,6 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
                                     }
 
                                     // Create a local color map for the new classes combined with existing classes
-                                    // This ensures that new subjects are assigned proper, distinct colors at insert-time.
                                     const allUniqueSubjects = new Set<string>()
                                     for (const existingCls of classes) {
                                         allUniqueSubjects.add(existingCls.name.split('-')[0].trim().toUpperCase())
@@ -375,7 +379,10 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
                                                 try {
                                                     const clean = (t: string) => {
                                                         const [time] = t.split(' ')
-                                                        return time.includes(':') ? time : `${time}:00`
+                                                        const parts = time.split(':')
+                                                        const h = parts[0].padStart(2, '0')
+                                                        const m = (parts[1] || '00').padStart(2, '0')
+                                                        return `${h}:${m}`
                                                     }
 
                                                     start = clean(parts[0])
@@ -395,7 +402,7 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
                                             end_time: end,
                                             location: cls.location || '',
                                             color: localColorMap.get(baseCourse) || colors[0],
-                                            semester_id: selectedSemester !== 'all' ? selectedSemester : null
+                                            semester_id: selectedSemester
                                         }
                                     })
 
@@ -408,7 +415,7 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
 
                                     if (inserted) {
                                         setClasses(prev => [...prev, ...inserted as ClassSchedule[]])
-                                        toast.success(`Added ${inserted.length} classes from timetable`)
+                                        toast.success(`Added ${inserted.length} classes to your timetable`)
                                     }
                                 } catch (e: unknown) {
                                     console.error('Timetable extract error:', e)

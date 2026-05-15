@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Share2, X, User as UserIcon, Check } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
@@ -36,8 +36,7 @@ export function ShareDialog({ contentType, contentId, title, trigger, onShare }:
 
     // Fetch shared users when dialog opens
     const fetchSharedUsers = async () => {
-        const supabase = createClient()
-        const { data, error } = await supabase
+                const { data, error } = await supabase
             .from('shared_content_access')
             .select(`
                 *,
@@ -62,8 +61,7 @@ export function ShareDialog({ contentType, contentId, title, trigger, onShare }:
         setLoading(true)
 
         try {
-            const supabase = createClient()
-            const { data: { user } } = await supabase.auth.getUser()
+                        const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
             // 1. Ensure shared_content record exists

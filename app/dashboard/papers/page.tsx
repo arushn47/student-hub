@@ -1,15 +1,20 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { PaperUploadDialog } from '@/components/papers/PaperUploadDialog'
-import { PaperListItem } from '@/components/papers/PaperListItem'
+import dynamic from 'next/dynamic'
 import { Input } from '@/components/ui/input'
+
+const PaperCard = dynamic(() => import('@/components/papers/PaperCard').then(mod => mod.PaperCard), {
+    loading: () => <div className="animate-pulse bg-white/5 rounded-2xl h-72" />
+})
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { Search, Folder } from 'lucide-react'
+import { Search, Folder, Upload } from 'lucide-react'
 import { SUBJECTS, EXAM_TYPES } from '@/lib/constants'
 import { useAuth } from '@/lib/auth-context'
+import { normalizePaperExamType } from '@/lib/papers'
 
 interface Paper {
     id: string
@@ -19,9 +24,12 @@ interface Paper {
     exam_type: string | null
     year: number
     file_url: string | null
+    file_urls?: string[] | null
     file_path?: string | null
     uploaded_by: string | null
     created_at: string
+    slot?: string | null
+    page_count?: number | null
 }
 
 export default function QuestionPapersPage() {
@@ -35,8 +43,7 @@ export default function QuestionPapersPage() {
     // Derived years only (since years are specific to data)
     const years = Array.from(new Set(papers.map(p => p.year))).sort((a, b) => b - a)
 
-    const supabase = createClient()
-    const { user, isAdmin } = useAuth()
+        const { user, isAdmin } = useAuth()
 
     const fetchPapers = useCallback(async () => {
         setLoading(true)
@@ -52,17 +59,24 @@ export default function QuestionPapersPage() {
     }, [supabase])
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         fetchPapers()
     }, [fetchPapers])
 
     const filteredPapers = papers.filter(paper => {
-        const matchesSearch = paper.title.toLowerCase().includes(search.toLowerCase()) ||
-            paper.subject.toLowerCase().includes(search.toLowerCase())
+        const normalizedExamType = normalizePaperExamType(paper.exam_type)
+        const displayTitle = `${paper.subject} - ${(normalizedExamType ?? paper.exam_type ?? 'Exam')} (${paper.year})`
+        const q = search.toLowerCase()
+
+        const matchesSearch =
+            paper.title.toLowerCase().includes(q) ||
+            paper.subject.toLowerCase().includes(q) ||
+            displayTitle.toLowerCase().includes(q) ||
+            (normalizedExamType ? normalizedExamType.toLowerCase().includes(q) : false) ||
+            (paper.slot ? paper.slot.toLowerCase().includes(q) : false)
 
         const matchesSubject = subjectFilter === 'all' || paper.subject === subjectFilter
         const matchesYear = yearFilter === 'all' || paper.year.toString() === yearFilter
-        const matchesExamType = examTypeFilter === 'all' || paper.exam_type === examTypeFilter
+        const matchesExamType = examTypeFilter === 'all' || normalizedExamType === examTypeFilter
 
         return matchesSearch && matchesSubject && matchesYear && matchesExamType
     })
@@ -75,10 +89,12 @@ export default function QuestionPapersPage() {
                         Question Bank
                     </h1>
                     <p className="text-sm text-gray-400 mt-1">
-                        Curated collection of previous year questions (PYQs).
+                        Curated collection of previous year questions (PYQs) for VIT Bhopal.
                     </p>
                 </div>
-                <PaperUploadDialog onUploadSuccess={fetchPapers} />
+                <div className="hidden md:block">
+                    <PaperUploadDialog onUploadSuccess={fetchPapers} />
+                </div>
             </div>
 
             {/* Filters */}
@@ -86,7 +102,7 @@ export default function QuestionPapersPage() {
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
                     <Input
-                        placeholder="Search papers, subjects..."
+                        placeholder="Search papers, subjects, slots..."
                         className="pl-9 bg-black/20 border-white/10"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -124,15 +140,17 @@ export default function QuestionPapersPage() {
                 </div>
             </div>
 
-            {/* Compact List View */}
-            <div className="space-y-3">
-                {loading ? (
-                    [1, 2, 3, 4].map(i => (
-                        <div key={i} className="h-24 animate-pulse bg-white/5 rounded-xl" />
-                    ))
-                ) : filteredPapers.length > 0 ? (
-                    filteredPapers.map(paper => (
-                        <PaperListItem
+            {/* Card Grid */}
+            {loading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                        <div key={i} className="animate-pulse bg-white/5 rounded-2xl h-72" />
+                    ))}
+                </div>
+            ) : filteredPapers.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {filteredPapers.map(paper => (
+                        <PaperCard
                             key={paper.id}
                             paper={paper}
                             currentUserId={user?.id}
@@ -141,7 +159,6 @@ export default function QuestionPapersPage() {
                                 // Delete from storage if file_url exists
                                 if (paper.file_url) {
                                     try {
-                                        // Extract storage path from public URL
                                         const url = new URL(paper.file_url)
                                         const pathMatch = url.pathname.match(/\/storage\/v1\/object\/public\/papers\/(.+)/)
                                         if (pathMatch?.[1]) {
@@ -163,26 +180,40 @@ export default function QuestionPapersPage() {
                                 fetchPapers()
                             }}
                         />
-                    ))
-                ) : (
-                    <div className="text-center py-20 text-gray-500 bg-black/20 rounded-2xl border border-dashed border-white/5">
-                        <Folder className="h-16 w-16 mx-auto mb-4 opacity-20" />
-                        <h3 className="text-lg font-medium text-gray-400 mb-1">No papers found</h3>
-                        <p className="text-sm mb-4 opacity-60">Try adjusting your filters or search query</p>
+                    ))}
+                </div>
+            ) : (
+                <div className="text-center py-20 text-gray-500 bg-black/20 rounded-2xl border border-dashed border-white/5">
+                    <Folder className="h-16 w-16 mx-auto mb-4 opacity-20" />
+                    <h3 className="text-lg font-medium text-gray-400 mb-1">No papers found</h3>
+                    <p className="text-sm mb-4 opacity-60">Try adjusting your filters or search query</p>
+                    <Button
+                        variant="outline"
+                        className="text-gray-400 border-white/10 hover:text-white"
+                        onClick={() => {
+                            setSubjectFilter('all')
+                            setYearFilter('all')
+                            setExamTypeFilter('all')
+                            setSearch('')
+                        }}
+                    >
+                        Clear Filters
+                    </Button>
+                </div>
+            )}
+
+            {/* Mobile FAB */}
+            <div className="md:hidden">
+                <PaperUploadDialog
+                    onUploadSuccess={fetchPapers}
+                    trigger={(
                         <Button
-                            variant="outline"
-                            className="text-gray-400 border-white/10 hover:text-white"
-                            onClick={() => {
-                                setSubjectFilter('all')
-                                setYearFilter('all')
-                                setExamTypeFilter('all')
-                                setSearch('')
-                            }}
+                            className="fixed bottom-24 right-5 h-12 w-12 rounded-2xl shadow-xl bg-white text-gray-900 hover:bg-gray-100 z-50 flex items-center justify-center"
                         >
-                            Clear Filters
+                            <Upload className="h-5 w-5" />
                         </Button>
-                    </div>
-                )}
+                    )}
+                />
             </div>
         </div>
     )

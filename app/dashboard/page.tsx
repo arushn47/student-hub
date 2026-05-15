@@ -6,16 +6,19 @@ import { NextClassWidget } from '@/components/dashboard/NextClassWidget'
 import { QuickActions } from '@/components/dashboard/QuickActions'
 import { FileText, CheckSquare, Clock, Target, Palmtree, TrendingUp } from 'lucide-react'
 import { StreakBadge } from '@/components/dashboard/StreakBadge'
+import { cn } from '@/lib/utils'
+import React from 'react'
 import type { Task, Note, ClassSchedule, SemesterBreak, Semester } from '@/types'
 
-async function getStats(supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never, userId: string) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getStats(supabase: any, userId: string) {
     const [notesResult, tasksResult, classesResult, semestersResult, breaksResult, subjectsResult] = await Promise.all([
         supabase.from('notes').select('*').eq('user_id', userId).is('deleted_at', null).order('updated_at', { ascending: false }),
         supabase.from('tasks').select('*').eq('user_id', userId).is('deleted_at', null).order('due_date', { ascending: true }),
         supabase.from('class_schedules').select('*').eq('user_id', userId).eq('is_active', true),
         supabase.from('semesters').select('*').eq('user_id', userId).order('start_date', { ascending: false }),
         supabase.from('semester_breaks').select('*').eq('user_id', userId).order('start_date', { ascending: true }),
-        supabase.from('exam_subjects').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+        supabase.from('exam_subjects').select('*, exam_modules(status)').eq('user_id', userId).eq('status', 'active').order('created_at', { ascending: false }),
     ])
 
     // Find active semester and filter breaks
@@ -28,12 +31,29 @@ async function getStats(supabase: ReturnType<typeof createClient> extends Promis
         ? allBreaks.filter(b => b.semester_id === activeSemester.id)
         : allBreaks
 
+    // Process subjects to compute readiness from joined modules
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const subjectsRaw = (subjectsResult.data || []) as any[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const subjects = subjectsRaw.map(s => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const modules: { status: string }[] = s.exam_modules || []
+        const total = modules.length
+        const ready = modules.filter(m => m.status === 'ready').length
+        return {
+            ...s,
+            exam_modules: undefined, // strip join data to keep object lean
+            total_modules: s.total_modules ?? total,
+            modules_ready: ready,
+            is_fully_ready: total > 0 && ready === total,
+        }
+    })
+
     return {
         notes: (notesResult.data || []) as Note[],
         tasks: (tasksResult.data || []) as Task[],
         classes: (classesResult.data || []) as ClassSchedule[],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        subjects: (subjectsResult.data || []) as any[],
+        subjects,
         breaks,
     }
 }
@@ -41,7 +61,6 @@ async function getStats(supabase: ReturnType<typeof createClient> extends Promis
 // Check if a date is during any break
 function isOnBreak(date: Date, breaks: SemesterBreak[]): { onBreak: boolean; breakName?: string } {
     const today = date.toISOString().split('T')[0]
-
     for (const b of breaks) {
         if (today >= b.start_date && today <= b.end_date) {
             return { onBreak: true, breakName: b.name }
@@ -52,9 +71,10 @@ function isOnBreak(date: Date, breaks: SemesterBreak[]): { onBreak: boolean; bre
 
 export default async function DashboardPage() {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const user = session?.user
 
-    // Handle guest mode - show demo data
+    // Handle guest mode
     if (!user) {
         return <DashboardContent
             notes={[]}
@@ -69,8 +89,7 @@ export default async function DashboardPage() {
     const { notes, tasks, classes, subjects, breaks } = await getStats(supabase, user.id)
     const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Student'
 
-    // Log daily activity server-side (non-blocking).
-    // This is the single source of "user was active today" — StreakBadge only reads.
+    // Log daily activity server-side (non-blocking)
     const today = new Date().toISOString().split('T')[0]
     supabase
         .from('user_activity')
@@ -78,7 +97,7 @@ export default async function DashboardPage() {
             { user_id: user.id, activity_date: today, activity_count: 1, updated_at: new Date().toISOString() },
             { onConflict: 'user_id,activity_date', ignoreDuplicates: true }
         )
-        .then(() => {})  // fire-and-forget
+        .then(() => {}) // fire-and-forget
 
     return <DashboardContent
         notes={notes}
@@ -118,18 +137,20 @@ function DashboardContent({
         return 'Good evening'
     }
 
-    // Get today's date info
     const today = new Date()
     const dateOptions: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long', day: 'numeric' }
     const formattedDate = today.toLocaleDateString('en-US', dateOptions)
 
-    // Check if today is on break
     const breakStatus = isOnBreak(today, breaks)
     const classesToday = breakStatus.onBreak ? 0 : classes.filter(c => c.day_of_week === today.getDay()).length
 
+    // Pick the most recent subject for the hero (first non-fully-ready, else first overall)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const heroSubject = subjects.find((s: any) => !s.is_fully_ready) ?? subjects[0]
+
     return (
         <div className="space-y-8">
-            {/* Header Section */}
+            {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
                 <div className="space-y-2">
                     <p className="text-sm text-gray-400">{formattedDate}</p>
@@ -139,7 +160,6 @@ function DashboardContent({
                     <p className="text-gray-400">Ready to crush your exams?</p>
                 </div>
 
-                {/* Quick stats badge */}
                 <div className="flex items-center gap-2 text-sm">
                     {breakStatus.onBreak ? (
                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
@@ -152,9 +172,9 @@ function DashboardContent({
                 </div>
             </div>
 
-            {/* Exam Prep Hero (New!) */}
-            {subjects.length > 0 ? (
-                <div className="relative p-6 rounded-3xl bg-linear-to-r from-amber-500/20 to-orange-600/20 border border-amber-500/30 overflow-hidden group">
+            {/* Exam Prep Hero */}
+            {heroSubject ? (
+                <div className="relative p-6 rounded-3xl bg-gradient-to-r from-amber-500/20 to-orange-600/20 border border-amber-500/30 overflow-hidden group">
                     <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
                         <Target className="w-32 h-32 text-amber-500 transform rotate-12" />
                     </div>
@@ -162,20 +182,33 @@ function DashboardContent({
                     <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                         <div>
                             <div className="flex items-center gap-2 mb-2">
-                                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-semibold border border-amber-500/30">
-                                    Top Priority
+                                <span className={cn(
+                                    "px-2 py-0.5 rounded-full text-xs font-semibold border",
+                                    heroSubject.is_fully_ready
+                                        ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                                        : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                )}>
+                                    {heroSubject.is_fully_ready ? 'Ready to Study' : 'Preparation in Progress'}
                                 </span>
+                                {subjects.length > 1 && (
+                                    <span className="text-xs text-gray-500">
+                                        +{subjects.length - 1} more subject{subjects.length > 2 ? 's' : ''}
+                                    </span>
+                                )}
                             </div>
-                            <h3 className="text-2xl font-bold text-white mb-2">Continue Studying</h3>
+                            <h3 className="text-2xl font-bold text-white mb-2">
+                                {heroSubject.is_fully_ready ? 'Time to Master It!' : 'Continue Studying'}
+                            </h3>
                             <p className="text-gray-400 max-w-lg">
-                                You have {subjects.length} active subjects. Pick up where you left off with
-                                <span className="text-amber-400 font-medium ml-1">{subjects[0].name}</span>.
+                                {heroSubject.is_fully_ready
+                                    ? `All modules for ${heroSubject.name} are generated and ready for your review.`
+                                    : `Making progress on ${heroSubject.name} — ${heroSubject.modules_ready}/${heroSubject.total_modules} modules ready.`}
                             </p>
                         </div>
 
-                        <a href={`/dashboard/exam-prep/${subjects[0].id}`} className="shrink-0 w-full md:w-auto">
-                            <button className="w-full md:w-auto px-6 py-3 rounded-xl bg-linear-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold shadow-lg shadow-amber-900/20 transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2">
-                                Resume Prep
+                        <a href={`/dashboard/exam-prep/${heroSubject.id}`} className="shrink-0 w-full md:w-auto">
+                            <button className="w-full md:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold shadow-lg shadow-amber-900/20 transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2">
+                                {heroSubject.is_fully_ready ? 'Start Review' : 'Resume Prep'}
                                 <TrendingUp className="h-4 w-4" />
                             </button>
                         </a>
@@ -192,7 +225,7 @@ function DashboardContent({
                     label="Active Subjects"
                     value={subjects.length}
                     color="amber"
-                    trend="Exam Prep"
+                    trend={subjects.length > 0 ? `${subjects.filter((s: any) => s.is_fully_ready).length} fully ready` : 'Exam Prep'}
                 />
                 <StatCard
                     icon={CheckSquare}
@@ -276,7 +309,7 @@ function StatCard({
     const c = colors[color]
 
     return (
-        <div className={`p-5 rounded-2xl bg-linear-to-br ${c.bg} ${c.border} border backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-default group`}>
+        <div className={`p-5 rounded-2xl bg-gradient-to-br ${c.bg} ${c.border} border backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-lg cursor-default group`}>
             <div className="flex items-start justify-between mb-3">
                 <div className={`p-2.5 rounded-xl ${c.iconBg} transition-transform group-hover:scale-110`}>
                     <Icon className={`h-5 w-5 ${c.icon}`} />

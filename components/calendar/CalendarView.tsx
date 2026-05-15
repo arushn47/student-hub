@@ -17,7 +17,7 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Palmtree, Clock
 import type { Task, ClassSchedule } from '@/types'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, getDay } from 'date-fns'
 import { cn } from '@/lib/utils'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
 interface SemesterBreak {
@@ -68,8 +68,7 @@ export function CalendarView({ tasks: initialTasks, classes, breaks = [] }: Cale
     const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium')
     const [savingTask, setSavingTask] = useState(false)
 
-    const supabase = createClient()
-
+    
     const monthStart = startOfMonth(currentMonth)
     const monthEnd = endOfMonth(currentMonth)
     const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd })

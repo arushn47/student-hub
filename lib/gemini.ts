@@ -1,8 +1,6 @@
 import { GoogleGenerativeAI, Part } from '@google/generative-ai'
 import { jsonrepair } from 'jsonrepair'
-
-const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'] as const
-
+const MODELS = ['gemini-2.5-flash'] as const
 function getClient(): GoogleGenerativeAI {
     const key = process.env.GEMINI_API_KEY
     if (!key) throw new Error('GEMINI_API_KEY is not configured')
@@ -34,13 +32,18 @@ export function hasKey(): boolean {
 /** Check if an error is retryable (429 quota / 503 overload). */
 function isRetryableError(err: unknown): boolean {
     const status = (err as { status?: number })?.status
-    const msg = err instanceof Error ? err.message : ''
+    const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
+    
     return (
         status === 429 || status === 503 ||
         msg.includes('429') || msg.includes('503') ||
-        msg.toLowerCase().includes('overloaded') ||
-        msg.toLowerCase().includes('high demand') ||
-        msg.toLowerCase().includes('quota')
+        msg.includes('overloaded') ||
+        msg.includes('high demand') ||
+        msg.includes('quota') ||
+        msg.includes('fetch failed') ||
+        msg.includes('timeout') ||
+        msg.includes('connecttimeout') ||
+        msg.includes('und_err_connect_timeout')
     )
 }
 

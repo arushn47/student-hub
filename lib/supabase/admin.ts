@@ -1,5 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 
+if (process.env.NEXT_RUNTIME === 'edge' || typeof window !== 'undefined') {
+    throw new Error('admin client must only be used server-side')
+}
+
 function requireEnv(name: string): string {
     const value = process.env[name]
     if (!value) {

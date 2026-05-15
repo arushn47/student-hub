@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useState, useEffect, useCallback } from 'react'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { useParams, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -308,8 +308,7 @@ export default function SubjectDetailPage() {
     const [isSavingSubjectQuestions, setIsSavingSubjectQuestions] = useState(false)
     const [showSubjectQuestions, setShowSubjectQuestions] = useState(false)
 
-    const supabase = createClient()
-
+    
     const fetchData = useCallback(async () => {
         try {
             const { data: { user } } = await supabase.auth.getUser()
@@ -509,7 +508,10 @@ export default function SubjectDetailPage() {
         let shouldMarkError = true
         const controller = new AbortController()
         const timeoutMs = 120_000
-        const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+        const timeoutId = window.setTimeout(() => {
+            // Provide a reason so errors are easier to interpret.
+            controller.abort(new DOMException('Timed out', 'AbortError'))
+        }, timeoutMs)
         const processingToastId = toast.loading('Processing with AI… this may take about a minute.')
 
         try {
@@ -555,8 +557,6 @@ export default function SubjectDetailPage() {
             toast.success('Module processed! Questions and flashcards generated.', { id: processingToastId })
             fetchData()
         } catch (error) {
-            console.error('Processing error:', error)
-
             const isAbort = error instanceof DOMException && error.name === 'AbortError'
             if (isAbort) {
                 toast.error(
@@ -570,6 +570,7 @@ export default function SubjectDetailPage() {
                     .eq('id', moduleId)
                 shouldMarkError = false
             } else {
+                console.error('Processing error:', error)
                 toast.error(error instanceof Error ? error.message : 'Failed to process module', { id: processingToastId })
             }
 
@@ -1130,7 +1131,8 @@ function QuestionCard({ question }: { question: Question }) {
                             <div className="text-sm overflow-hidden">
                                 <MarkdownRenderer
                                     content={question.answer}
-                                    className="prose-p:my-1 prose-pre:bg-black/50"
+                                    variant="exam"
+                                    className="prose-p:my-1"
                                 />
                             </div>
 

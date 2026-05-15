@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -82,8 +82,7 @@ export default function BudgetPage() {
     const [smsText, setSmsText] = useState('')
     const [isParsing, setIsParsing] = useState(false)
 
-    const supabase = createClient()
-
+    
     useEffect(() => {
         const fetchData = async () => {
             try {

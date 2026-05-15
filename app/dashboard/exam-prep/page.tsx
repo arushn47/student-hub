@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,7 +42,10 @@ import {
     Loader2,
     Trash2,
     ArrowRight,
-    Upload
+    Upload,
+    CheckCircle2,
+    RotateCcw,
+    Archive
 } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
@@ -57,6 +60,7 @@ interface Subject {
     exam_type: string
     created_at: string
     modules_ready: number
+    status: 'active' | 'completed'
 }
 
 export default function ExamPrepPage() {
@@ -65,6 +69,7 @@ export default function ExamPrepPage() {
     const [creating, setCreating] = useState(false)
     const [dialogOpen, setDialogOpen] = useState(false)
     const [subjectToDelete, setSubjectToDelete] = useState<string | null>(null)
+    const [showCompleted, setShowCompleted] = useState(false)
     const [newSubject, setNewSubject] = useState({
         name: '',
         total_modules: 5,
@@ -73,8 +78,7 @@ export default function ExamPrepPage() {
         exam_type: 'endterm'
     })
     const [syllabusFile, setSyllabusFile] = useState<File | null>(null)
-    const supabase = createClient()
-
+    
     useEffect(() => {
         fetchSubjects()
     }, [])
@@ -88,7 +92,7 @@ export default function ExamPrepPage() {
                 .from('exam_subjects')
                 .select(`
                 *,
-                exam_modules!inner(id, status)
+                exam_modules(id, status)
             `)
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
@@ -98,7 +102,8 @@ export default function ExamPrepPage() {
             // Process to get modules_ready count
             const processedData = data?.map(subject => ({
                 ...subject,
-                modules_ready: subject.exam_modules?.filter((m: { status: string }) => m.status === 'ready').length || 0
+                modules_ready: subject.exam_modules?.filter((m: { status: string }) => m.status === 'ready').length || 0,
+                status: subject.status || 'active',
             })) || []
 
             setSubjects(processedData)
@@ -233,6 +238,23 @@ export default function ExamPrepPage() {
             toast.error('Failed to delete subject')
         } finally {
             setSubjectToDelete(null)
+        }
+    }
+
+    const toggleSubjectStatus = async (subjectId: string, currentStatus: 'active' | 'completed') => {
+        const newStatus = currentStatus === 'active' ? 'completed' : 'active'
+        const label = newStatus === 'completed' ? 'archived' : 'restored'
+        try {
+            const { error } = await supabase
+                .from('exam_subjects')
+                .update({ status: newStatus })
+                .eq('id', subjectId)
+            if (error) throw error
+            toast.success(`Subject ${label}!`)
+            fetchSubjects()
+        } catch (error) {
+            console.error('Error updating subject status:', error)
+            toast.error('Failed to update subject')
         }
     }
 
@@ -388,8 +410,8 @@ export default function ExamPrepPage() {
                                 <BookOpen className="h-6 w-6 text-amber-400" />
                             </div>
                             <div>
-                                <p className="text-2xl font-bold">{subjects.length}</p>
-                                <p className="text-sm text-muted-foreground">Subjects</p>
+                                <p className="text-2xl font-bold">{subjects.filter(s => s.status === 'active').length}</p>
+                                <p className="text-sm text-muted-foreground">Active Subjects</p>
                             </div>
                         </div>
                     </CardContent>
@@ -402,7 +424,7 @@ export default function ExamPrepPage() {
                             </div>
                             <div>
                                 <p className="text-2xl font-bold">
-                                    {subjects.reduce((acc, s) => acc + s.modules_ready, 0)}
+                                    {subjects.filter(s => s.status === 'active').reduce((acc, s) => acc + s.modules_ready, 0)}
                                 </p>
                                 <p className="text-sm text-muted-foreground">Modules Ready</p>
                             </div>
@@ -413,11 +435,11 @@ export default function ExamPrepPage() {
                     <CardContent className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="p-3 rounded-xl bg-violet-500/10">
-                                <Target className="h-6 w-6 text-violet-400" />
+                                <CheckCircle2 className="h-6 w-6 text-violet-400" />
                             </div>
                             <div>
-                                <p className="text-2xl font-bold">AI</p>
-                                <p className="text-sm text-muted-foreground">Powered Predictions</p>
+                                <p className="text-2xl font-bold">{subjects.filter(s => s.status === 'completed').length}</p>
+                                <p className="text-sm text-muted-foreground">Completed</p>
                             </div>
                         </div>
                     </CardContent>
@@ -425,31 +447,66 @@ export default function ExamPrepPage() {
             </div>
 
             {/* Subjects Grid */}
-            {subjects.length === 0 ? (
-                <Card className="glass-card">
-                    <CardContent className="py-16 text-center">
-                        <Target className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
-                        <h3 className="text-xl font-semibold mb-2">No subjects yet</h3>
-                        <p className="text-muted-foreground mb-6">
-                            Create your first subject to start preparing for exams
-                        </p>
-                        <Button onClick={() => setDialogOpen(true)} className="gradient-primary text-white gap-2">
-                            <Plus className="h-4 w-4" />
-                            Create Subject
-                        </Button>
-                    </CardContent>
-                </Card>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {subjects.map((subject) => (
-                        <SubjectCard
-                            key={subject.id}
-                            subject={subject}
-                            onDelete={() => setSubjectToDelete(subject.id)}
-                        />
-                    ))}
-                </div>
-            )}
+            {/* Active / Completed toggle */}
+            <div className="flex items-center gap-3">
+                <Button
+                    variant={!showCompleted ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setShowCompleted(false)}
+                    className="gap-2"
+                >
+                    <Target className="h-3.5 w-3.5" />
+                    Active ({subjects.filter(s => s.status === 'active').length})
+                </Button>
+                <Button
+                    variant={showCompleted ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setShowCompleted(true)}
+                    className="gap-2"
+                >
+                    <Archive className="h-3.5 w-3.5" />
+                    Completed ({subjects.filter(s => s.status === 'completed').length})
+                </Button>
+            </div>
+
+            {(() => {
+                const filtered = subjects.filter(s => s.status === (showCompleted ? 'completed' : 'active'))
+                if (filtered.length === 0) return (
+                    <Card className="glass-card">
+                        <CardContent className="py-16 text-center">
+                            {showCompleted
+                                ? <CheckCircle2 className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
+                                : <Target className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />}
+                            <h3 className="text-xl font-semibold mb-2">
+                                {showCompleted ? 'No completed subjects' : 'No active subjects'}
+                            </h3>
+                            <p className="text-muted-foreground mb-6">
+                                {showCompleted
+                                    ? 'Mark subjects as complete after your exam!'
+                                    : 'Create your first subject to start preparing for exams'}
+                            </p>
+                            {!showCompleted && (
+                                <Button onClick={() => setDialogOpen(true)} className="gradient-primary text-white gap-2">
+                                    <Plus className="h-4 w-4" />
+                                    Create Subject
+                                </Button>
+                            )}
+                        </CardContent>
+                    </Card>
+                )
+                return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filtered.map((subject) => (
+                            <SubjectCard
+                                key={subject.id}
+                                subject={subject}
+                                onDelete={() => setSubjectToDelete(subject.id)}
+                                onToggleStatus={() => toggleSubjectStatus(subject.id, subject.status)}
+                            />
+                        ))}
+                    </div>
+                )
+            })()}
 
             <AlertDialog open={!!subjectToDelete} onOpenChange={(open) => !open && setSubjectToDelete(null)}>
                 <AlertDialogContent>
@@ -472,7 +529,7 @@ export default function ExamPrepPage() {
     )
 }
 
-function SubjectCard({ subject, onDelete }: { subject: Subject; onDelete: () => void }) {
+function SubjectCard({ subject, onDelete, onToggleStatus }: { subject: Subject; onDelete: () => void; onToggleStatus: () => void }) {
     const progress = subject.total_modules > 0
         ? Math.round((subject.modules_ready / subject.total_modules) * 100)
         : 0
@@ -482,8 +539,10 @@ function SubjectCard({ subject, onDelete }: { subject: Subject; onDelete: () => 
             <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="p-2.5 rounded-xl bg-amber-500/10">
-                            <Target className="h-5 w-5 text-amber-400" />
+                        <div className={cn("p-2.5 rounded-xl", subject.status === 'completed' ? 'bg-emerald-500/10' : 'bg-amber-500/10')}>
+                            {subject.status === 'completed'
+                                ? <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                                : <Target className="h-5 w-5 text-amber-400" />}
                         </div>
                         <div>
                             <CardTitle className="text-lg">{subject.name}</CardTitle>
@@ -492,14 +551,25 @@ function SubjectCard({ subject, onDelete }: { subject: Subject; onDelete: () => 
                             </p>
                         </div>
                     </div>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                        onClick={(e) => { e.preventDefault(); onDelete(); }}
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-emerald-400"
+                            onClick={(e) => { e.preventDefault(); onToggleStatus(); }}
+                            title={subject.status === 'active' ? 'Mark as complete' : 'Restore to active'}
+                        >
+                            {subject.status === 'active' ? <CheckCircle2 className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                            onClick={(e) => { e.preventDefault(); onDelete(); }}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
             </CardHeader>
             <CardContent className="space-y-4">

@@ -192,6 +192,7 @@ CREATE TABLE public.exam_subjects (
   syllabus_path text,
   exam_type text DEFAULT 'endterm'::text,
   important_questions text,
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'completed'::text])),
   CONSTRAINT exam_subjects_pkey PRIMARY KEY (id),
   CONSTRAINT exam_subjects_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
@@ -296,11 +297,14 @@ CREATE TABLE public.question_papers (
   subject text NOT NULL,
   semester text,
   year integer,
-  file_url text NOT NULL,
+  file_url text,
   uploaded_by uuid NOT NULL,
   downloads integer DEFAULT 0,
   created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
   exam_type text,
+  slot text,
+  page_count integer,
+  file_urls jsonb,
   CONSTRAINT question_papers_pkey PRIMARY KEY (id),
   CONSTRAINT question_papers_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES auth.users(id)
 );

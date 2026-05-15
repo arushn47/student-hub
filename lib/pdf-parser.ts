@@ -6,20 +6,21 @@
 const DISTRIBUTION_MAP: Record<string, string> = {
     'PC': 'Programme Core',
     'PE': 'Programme Elective',
-    'UCNSC': 'University Core - Natural Science Core',
-    'UCNS': 'University Core - Natural Science Core',
-    'UCBESC': 'University Core - Basic Engineering Sciences Core',
-    'UCBES': 'University Core - Basic Engineering Sciences Core',
-    'UCES': 'University Core - Basic Engineering Sciences Core',
-    'UCSDC': 'University Core - Skill Development Courses',
-    'UCSD': 'University Core - Skill Development Courses',
-    'UCHSSMC': 'University Core - Humanities Social Science and Management Core',
-    'UCHSS': 'University Core - Humanities Social Science and Management Core',
-    'UCPI': 'University Core - Project and Internships',
-    'UENSE': 'University Elective - Natural Science Electives',
-    'UENS': 'University Elective - Natural Science Electives',
-    'UEHSSME': 'University Elective - Multidisciplinary Electives',
-    'UEM': 'University Elective - Multidisciplinary Electives',
+    'UCNSC': 'University Core - Natural Science',
+    'UCNS': 'University Core - Natural Science',
+    'UCBESC': 'University Core - Engineering Sciences',
+    'UCBES': 'University Core - Engineering Sciences',
+    'UCES': 'University Core - Engineering Sciences',
+    'UCSDC': 'University Core - Skill Development',
+    'UCSD': 'University Core - Skill Development',
+    'UCHSSMC': 'University Core - Humanities & Social Science',
+    'UCHSS': 'University Core - Humanities & Social Science',
+    'UCPI': 'University Core - Project & Internships',
+    'UENSE': 'University Elective - Natural Science',
+    'UENS': 'University Elective - Natural Science',
+    'UEHSSME': 'University Elective - Humanities & Social',
+    'UEHSS': 'University Elective - Humanities & Social',
+    'UEM': 'University Elective - Multidisciplinary',
     'UEOE': 'University Elective - Open Electives',
     'OE': 'University Elective - Open Electives',
     'NMC': 'Non-Graded Mandatory Courses',
@@ -175,7 +176,9 @@ function buildSemesterMap(examMonths: string[]): Map<string, string> {
     sortedKeys.forEach((key, idx) => {
         const months = buckets.get(key)!
         for (const raw of months) {
-            semMap.set(raw, `Semester ${idx + 1}`)
+            const semNum = idx + 1
+            const semName = semNum > 8 ? 'Miscellaneous' : `Semester ${semNum}`
+            semMap.set(raw, semName)
         }
     })
 
@@ -396,11 +399,13 @@ export async function parseGradesPDF(file: File): Promise<{ courses: ParsedCours
 
         // Extract meaningful candidate text
         const parts = lineText.split('\t').map(p => p.trim()).filter(Boolean)
-        const valid = parts.filter(p => !isNonTitleToken(p))
-        if (valid.length === 0) continue
-
-        const titleCandidate = valid.map(v => v.trim()).join(' ').trim()
-        if (!titleCandidate) continue
+        const validTitleParts = parts.filter(p => !isNonTitleToken(p))
+        const hasDistributionPart = parts.some(p => {
+            const upper = p.toUpperCase()
+            return DISTRIBUTION_SUFFIXES.has(upper) || DISTRIBUTION_MAP[upper]
+        })
+        
+        if (validTitleParts.length === 0 && !hasDistributionPart) continue
 
         // Find nearest data row on the same page
         let bestRow: TrackedRow | null = null
@@ -420,11 +425,28 @@ export async function parseGradesPDF(file: File): Promise<{ courses: ParsedCours
         // 50px threshold for rows in the same table
         if (bestRow && minDist <= 50) {
             const dataLine = rawLines[bestRow.lineIdx]
-            // PDF coordinates: Y increases bottom-up
-            if (rawLines[i].y > dataLine.y) {
-                bestRow.partsBefore.push({ y: rawLines[i].y, text: titleCandidate })
-            } else {
-                bestRow.partsAfter.push({ y: rawLines[i].y, text: titleCandidate })
+            
+            // Check for distribution codes or suffixes
+            for (const p of parts) {
+                const upper = p.toUpperCase()
+                if (DISTRIBUTION_SUFFIXES.has(upper)) {
+                    const merged = bestRow.distribution + upper
+                    if (DISTRIBUTION_MAP[merged]) {
+                        bestRow.distribution = merged
+                    }
+                } else if (DISTRIBUTION_MAP[upper]) {
+                    bestRow.distribution = upper
+                }
+            }
+
+            const titleCandidate = validTitleParts.map(v => v.trim()).join(' ').trim()
+            if (titleCandidate) {
+                // PDF coordinates: Y increases bottom-up
+                if (rawLines[i].y > dataLine.y) {
+                    bestRow.partsBefore.push({ y: rawLines[i].y, text: titleCandidate })
+                } else {
+                    bestRow.partsAfter.push({ y: rawLines[i].y, text: titleCandidate })
+                }
             }
         }
     }
@@ -476,4 +498,110 @@ export async function parseGradesPDF(file: File): Promise<{ courses: ParsedCours
     console.log(`Parsed ${courses.length} courses from PDF across ${semesterMap.size} semesters`)
 
     return { courses }
+}
+/**
+ * Parse VIT Timetable PDF and extract class schedule.
+ * Entirely client-side — no API calls.
+ */
+export async function parseTimetablePDF(file: File): Promise<{ classes: any[] }> {
+    const rawLines = await extractTextFromPDF(file)
+    console.log('Timetable PDF extracted lines count:', rawLines.length)
+
+    const classes: any[] = []
+    const dayMap: Record<string, string> = {
+        'MON': 'Monday',
+        'TUE': 'Tuesday',
+        'WED': 'Wednesday',
+        'THU': 'Thursday',
+        'FRI': 'Friday',
+        'SAT': 'Saturday',
+        'SUN': 'Sunday'
+    }
+
+    const timeSlots = [
+        { start: '08:30', end: '10:00', x: [100, 200] }, // Rough X ranges - will be refined
+        { start: '10:05', end: '11:35', x: [200, 300] },
+        { start: '11:40', end: '13:10', x: [300, 400] },
+        { start: '13:15', end: '14:45', x: [450, 550] },
+        { start: '14:50', end: '16:20', x: [550, 650] },
+        { start: '16:25', end: '17:55', x: [650, 750] },
+        { start: '18:00', end: '19:30', x: [750, 850] }
+    ]
+
+    // Identify rows that start with a day name
+    for (const line of rawLines) {
+        const parts = line.text.split('\t').map(p => p.trim()).filter(Boolean)
+        const firstPart = parts[0]?.toUpperCase()
+
+        if (dayMap[firstPart]) {
+            const dayName = dayMap[firstPart]
+            
+            // In VIT Timetables, a row often looks like: MON \t A11 \t B11-CSE1001-LTP...
+            // We need to match these to the right time slot.
+            // Since we don't have perfect X-coordinates in the joined text, we'll look for course codes.
+            
+            for (let i = 1; i < parts.length; i++) {
+                const part = parts[i]
+                // Match course pattern: SLOT-CODE-TYPE-ROOM (e.g. B11-CSE3009-LTP-AB02-429)
+                const courseMatch = part.match(/^([A-Z]\d{2})-([A-Z]{2,4}\d{3,4}(?:-[A-Z]+)?)-([A-Z]{1,3})/)
+                
+                if (courseMatch) {
+                    const slotId = courseMatch[1]
+                    const subject = part // Keep full string as subject
+                    
+                    // Map SlotID to Time
+                    // A11/B11/C11/D11/E11/F11 -> 08:30
+                    // A12/B12... -> Slot 2, etc.
+                    // This is a common VIT pattern
+                    const slotNum = parseInt(slotId.substring(1))
+                    let timeIdx = -1
+                    
+                    if (slotNum >= 11 && slotNum <= 17) timeIdx = slotNum - 11
+                    else if (slotNum >= 21 && slotNum <= 27) timeIdx = slotNum - 21
+                    
+                    if (timeIdx >= 0 && timeIdx < timeSlots.length) {
+                        const slot = timeSlots[timeIdx]
+                        classes.push({
+                            day: dayName,
+                            time: `${slot.start} - ${slot.end}`,
+                            subject: subject,
+                            location: part.split('-').slice(-2).join('-') // Guessing location from end of string
+                        })
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: If heuristic fails, try scanning for any course-code like strings with slot prefixes
+    if (classes.length === 0) {
+        console.warn('Timetable heuristic failed, falling back to regex scan')
+        for (const line of rawLines) {
+            const dayMatch = line.text.match(/\b(MON|TUE|WED|THU|FRI|SAT|SUN)\b/i)
+            if (!dayMatch) continue
+            
+            const dayName = dayMap[dayMatch[1].toUpperCase()]
+            const courseMatches = line.text.matchAll(/\b([A-Z]\d{2})-([A-Z]{2,4}\d{3,4}(?:-[A-Z]+)?)-([A-Z]{1,3})-([A-Z0-9-]{4,})\b/g)
+            
+            for (const m of courseMatches) {
+                const slotId = m[1]
+                const slotNum = parseInt(slotId.substring(1))
+                let timeIdx = -1
+                if (slotNum >= 11 && slotNum <= 17) timeIdx = slotNum - 11
+                else if (slotNum >= 21 && slotNum <= 27) timeIdx = slotNum - 21
+                
+                if (timeIdx >= 0 && timeIdx < timeSlots.length) {
+                    const slot = timeSlots[timeIdx]
+                    classes.push({
+                        day: dayName,
+                        time: `${slot.start} - ${slot.end}`,
+                        subject: m[0],
+                        location: m[4]
+                    })
+                }
+            }
+        }
+    }
+
+    return { classes }
 }

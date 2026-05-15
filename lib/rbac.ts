@@ -9,7 +9,8 @@ export type UserRole = 'user' | 'admin'
  */
 export async function getUserRole(): Promise<UserRole | null> {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const user = session?.user
     if (!user) return null
 
     const { data: profile } = await supabase
@@ -43,7 +44,8 @@ export async function isAdmin(): Promise<boolean> {
  */
 export async function requireAdmin() {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    const user = session?.user
 
     if (!user) {
         return NextResponse.json(

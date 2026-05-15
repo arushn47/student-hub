@@ -27,9 +27,12 @@ export async function middleware(request: NextRequest) {
         }
     )
 
+    // Use getSession() instead of getUser() to avoid making ANY network requests in the Edge Runtime.
+    // This perfectly bypasses the Indian ISP/Jio IPv6 routing timeout because it parses the JWT cookie locally!
     const {
-        data: { user },
-    } = await supabase.auth.getUser()
+        data: { session },
+    } = await supabase.auth.getSession()
+    const user = session?.user
 
     // Catch auth codes that land on the wrong page (e.g. Supabase falling
     // back to site root when redirect URL isn't in the allowlist).
@@ -77,20 +80,8 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(url)
     }
 
-    // Admin route protection — only users with role='admin' may access /dashboard/admin/*
-    if (user && request.nextUrl.pathname.startsWith('/dashboard/admin')) {
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single()
-
-        if (profile?.role !== 'admin') {
-            const url = request.nextUrl.clone()
-            url.pathname = '/dashboard'
-            return NextResponse.redirect(url)
-        }
-    }
+    // Admin role protection is handled securely inside app/dashboard/admin/page.tsx
+    // We removed the profile fetch from middleware to keep Edge runtime 100% offline.
 
     return supabaseResponse
 }

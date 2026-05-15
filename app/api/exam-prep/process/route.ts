@@ -237,6 +237,15 @@ export async function POST(request: Request) {
             ${topicOnly ? '\n- TOPIC-ONLY MODE: Use ONLY content relevant to this module topic. If the syllabus includes other modules/units, IGNORE them completely.' : ''}
             - If provided with PDF images, pay special attention to any **HIGHLIGHTED TEXT** (yellow/colored backgrounds) or red-circled items, as these are strict syllabus priority areas.
             - If a question would benefit from a visual diagram (e.g. "Draw the architecture of X", "Explain the cycle of Y"), provide a specific Google Image search query in 'visual_search_query' (e.g. "labeled diagram of von neumann architecture"). Otherwise leave it null.
+            - **CODE FORMATTING RULE (CRITICAL):** When including code examples in answers, you MUST use proper markdown fenced code blocks with the language identifier. For example:
+              \`\`\`cpp
+              #include <iostream>
+              int main() {
+                  std::cout << "Hello";
+                  return 0;
+              }
+              \`\`\`
+              NEVER write code inline as a single paragraph of text. Always use triple-backtick fenced code blocks with proper indentation and line breaks. This applies to ALL programming languages (cpp, java, python, c, sql, etc.).
             - Return pure JSON.`
 
         parts.push(systemPrompt)

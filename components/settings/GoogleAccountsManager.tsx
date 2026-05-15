@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -23,8 +23,7 @@ export function GoogleAccountsManager({ onConnectionChange }: GoogleAccountsMana
     const [accounts, setAccounts] = useState<GoogleAccount[]>([])
     const [loading, setLoading] = useState(true)
     const [connecting, setConnecting] = useState(false)
-    const supabase = createClient()
-
+    
     const loadAccounts = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return

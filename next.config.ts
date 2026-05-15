@@ -1,13 +1,23 @@
 import type { NextConfig } from "next";
+import dns from "node:dns";
+
+// Bypass Jio ISP DNS hijacking and IPv6 timeouts
+dns.setServers(["8.8.8.8", "1.1.1.1"]);
+dns.setDefaultResultOrder("ipv4first");
+
+const isDev = process.env.NODE_ENV === "development";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const withPWA = require("next-pwa")({
   dest: "public",
-  disable: process.env.NODE_ENV === "development",
+  disable: isDev,
   buildExcludes: [/app-build-manifest\.json$/],
 });
 
 const nextConfig: NextConfig = {
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'date-fns', '@radix-ui/react-icons'],
+  },
   /* config options here */
   eslint: {
     ignoreDuringBuilds: true,
@@ -43,7 +53,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()'
+            value: 'camera=(), microphone=(self), geolocation=()'
           },
           {
             key: 'X-XSS-Protection',
@@ -57,7 +67,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              `connect-src 'self' blob: ${process.env.NEXT_PUBLIC_SUPABASE_URL || ''} https://*.supabase.co https://generativelanguage.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.googleapis.com https://*.googleusercontent.com https://tessdata.projectnaptha.com https://unpkg.com https://cdn.jsdelivr.net/`,
+              "connect-src 'self' blob: https://*.supabase.co https://ioktlqvlrnmxpssbm.supabase.co https://generativelanguage.googleapis.com https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com https://*.googleapis.com https://*.googleusercontent.com https://tessdata.projectnaptha.com https://unpkg.com https://cdn.jsdelivr.net/",
               "worker-src 'self' blob:",
               "frame-ancestors 'none'",
               "base-uri 'self'",
@@ -70,4 +80,4 @@ const nextConfig: NextConfig = {
   }
 };
 
-export default withPWA(nextConfig);
+export default isDev ? nextConfig : withPWA(nextConfig);

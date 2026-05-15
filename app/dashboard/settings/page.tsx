@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,6 +35,7 @@ interface UserProfile {
         theme: 'light' | 'dark' | 'system'
         notifications_enabled: boolean
         daily_motivation: boolean
+        degree_type?: 'btech' | 'mtech'
     }
 }
 
@@ -43,8 +44,7 @@ export default function SettingsPage() {
     const [saving, setSaving] = useState(false)
     const [profile, setProfile] = useState<UserProfile | null>(null)
     const [googleConnected, setGoogleConnected] = useState(false)
-    const supabase = createClient()
-    const { theme, setTheme } = useTheme()
+        const { theme, setTheme } = useTheme()
     const searchParams = useSearchParams()
 
     // Check for Google connection status from URL params
@@ -86,6 +86,7 @@ export default function SettingsPage() {
                         theme: 'dark',
                         notifications_enabled: true,
                         daily_motivation: true,
+                        degree_type: 'btech',
                     },
                 })
                 .select()
@@ -109,6 +110,7 @@ export default function SettingsPage() {
                     theme: 'dark',
                     notifications_enabled: true,
                     daily_motivation: true,
+                    degree_type: 'btech',
                 },
             })
         }
@@ -221,6 +223,31 @@ export default function SettingsPage() {
                             className="bg-input border-border text-muted-foreground"
                         />
                         <p className="text-xs text-muted-foreground">Email cannot be changed</p>
+                    </div>
+
+                    {/* Degree Type */}
+                    <div className="space-y-2 pt-2 border-t border-border/50">
+                        <Label className="text-foreground">Degree Program</Label>
+                        <Select
+                            value={profile?.preferences?.degree_type || 'btech'}
+                            onValueChange={async (val) => {
+                                updatePreference('degree_type', val)
+                                // Clear old curriculum requirements so it regenerates on the Grades page
+                                const { data: { user } } = await supabase.auth.getUser()
+                                if (user) {
+                                    await supabase.from('degree_requirements').delete().eq('user_id', user.id)
+                                }
+                            }}
+                        >
+                            <SelectTrigger className="bg-input border-border text-foreground">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover border-border">
+                                <SelectItem value="btech">B.Tech (4 Years - 169 Credits)</SelectItem>
+                                <SelectItem value="mtech">Integrated M.Tech (5 Years - 229 Credits)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">Changing this will reset your curriculum category tracking in the Grades tab.</p>
                     </div>
                 </CardContent>
             </Card>

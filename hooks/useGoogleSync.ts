@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useCallback, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
 interface SyncResult {
@@ -44,8 +44,7 @@ export function useGoogleSync(options?: {
             // Check if user has any Google account connected (cached after first check)
             if (hasGoogleAccount.current === null) {
                 try {
-                    const supabase = createClient()
-                    const { data: { user } } = await supabase.auth.getUser()
+                                        const { data: { user } } = await supabase.auth.getUser()
                     if (!user) { hasGoogleAccount.current = false; return results }
                     const { count } = await supabase
                         .from('google_accounts')

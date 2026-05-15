@@ -4,6 +4,8 @@ import { useEffect } from 'react';
 
 export function ServiceWorkerRegistration() {
     useEffect(() => {
+        // Temporarily disabled to prevent Supabase upload stalling
+        /*
         if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
             navigator.serviceWorker
                 .register('/sw.js')
@@ -14,6 +16,7 @@ export function ServiceWorkerRegistration() {
                     console.error('Service Worker registration failed:', error);
                 });
         }
+        */
     }, []);
 
     return null;

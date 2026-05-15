@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 
 interface FeatureFlags {
     [key: string]: boolean
@@ -29,8 +29,7 @@ export function useFeatureFlags() {
             }
         } catch { }
 
-        const supabase = createClient()
-        supabase
+                supabase
             .from('feature_flags')
             .select('name, is_enabled')
             .then(({ data }) => {
