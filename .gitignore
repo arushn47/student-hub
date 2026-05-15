@@ -50,3 +50,10 @@ public/sw.js
 public/sw.js.map
 public/workbox-*.js
 public/workbox-*.js.map
+
+# Supabase CLI temp files
+supabase/.temp
+
+# Scratch and test files
+scratch/
+docs/

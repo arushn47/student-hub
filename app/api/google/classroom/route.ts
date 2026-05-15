@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getClassroomClient } from '@/lib/google'
@@ -22,10 +23,21 @@ export async function GET() {
         const classroomClient = getClassroomClient(tokens)
 
         // Get all courses the user is enrolled in
-        const coursesResponse = await classroomClient.courses.list({
-            courseStates: ['ACTIVE'],
-            pageSize: 20,
-        })
+        let coursesResponse
+        try {
+            coursesResponse = await classroomClient.courses.list({
+                courseStates: ['ACTIVE'],
+                pageSize: 20,
+            })
+        } catch (err: any) {
+            if (err.code === 400 && err.message?.includes('invalid_grant')) {
+                return NextResponse.json(
+                    { error: 'google_reauth_required' },
+                    { status: 401 }
+                )
+            }
+            throw err
+        }
 
         const courses = coursesResponse.data.courses || []
         console.log('Found courses:', courses.map(c => c.name))
@@ -99,7 +111,7 @@ export async function GET() {
         // Token expired / revoked
         if (msg.includes('invalid_grant') || errorObj.code === 401) {
             return NextResponse.json({
-                error: 'Your Google session has expired. Please reconnect your Google account in Settings.',
+                error: 'google_reauth_required',
                 needsReconnect: true
             }, { status: 401 })
         }
@@ -135,10 +147,21 @@ export async function POST() {
         const classroomClient = getClassroomClient(tokens)
 
         // Get courses
-        const coursesResponse = await classroomClient.courses.list({
-            courseStates: ['ACTIVE'],
-            pageSize: 20,
-        })
+        let coursesResponse
+        try {
+            coursesResponse = await classroomClient.courses.list({
+                courseStates: ['ACTIVE'],
+                pageSize: 20,
+            })
+        } catch (err: any) {
+            if (err.code === 400 && err.message?.includes('invalid_grant')) {
+                return NextResponse.json(
+                    { error: 'google_reauth_required' },
+                    { status: 401 }
+                )
+            }
+            throw err
+        }
 
         const courses = coursesResponse.data.courses || []
         let importedCount = 0
@@ -250,7 +273,7 @@ export async function POST() {
         // Token expired / revoked
         if (msg.includes('invalid_grant') || errorObj.code === 401) {
             return NextResponse.json({
-                error: 'Your Google session has expired. Please reconnect your Google account in Settings.',
+                error: 'google_reauth_required',
                 needsReconnect: true
             }, { status: 401 })
         }

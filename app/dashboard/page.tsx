@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient } from '@/lib/supabase/server'
 import { MotivationCard } from '@/components/dashboard/MotivationCard'
 import { TasksWidget } from '@/components/dashboard/TasksWidget'
@@ -34,9 +35,9 @@ async function getStats(supabase: any, userId: string) {
     // Process subjects to compute readiness from joined modules
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const subjectsRaw = (subjectsResult.data || []) as any[]
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const subjects = subjectsRaw.map(s => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const modules: { status: string }[] = s.exam_modules || []
         const total = modules.length
         const ready = modules.filter(m => m.status === 'ready').length
@@ -71,8 +72,7 @@ function isOnBreak(date: Date, breaks: SemesterBreak[]): { onBreak: boolean; bre
 
 export default async function DashboardPage() {
     const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    const user = session?.user
+    const { data: { user } } = await supabase.auth.getUser()
 
     // Handle guest mode
     if (!user) {

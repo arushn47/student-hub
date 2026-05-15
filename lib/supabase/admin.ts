@@ -14,7 +14,7 @@ function requireEnv(name: string): string {
 
 export function createAdminClient() {
     const url = requireEnv('NEXT_PUBLIC_SUPABASE_URL')
-    const serviceKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY')
+    const serviceKey = requireEnv('SUPABASE_SECRET_KEY')
 
     return createClient(url, serviceKey, {
         auth: {

@@ -5,8 +5,7 @@ import type { ClassSchedule, Semester } from '@/types'
 
 export default async function TimetablePage() {
     const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    const user = session?.user
+    const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
         redirect('/login')

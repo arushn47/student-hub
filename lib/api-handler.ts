@@ -62,7 +62,7 @@ const DEFAULT_RATE_LIMIT_V2 = {
 function deepSanitize<T>(value: T): T {
     if (typeof value === 'string') {
         // Strip NUL bytes and control chars (except whitespace)
-        // eslint-disable-next-line no-control-regex
+         
         return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') as unknown as T
     }
     if (Array.isArray(value)) {

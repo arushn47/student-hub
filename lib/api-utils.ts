@@ -5,8 +5,7 @@ import { NextResponse } from 'next/server'
 // Returns null if not authenticated
 export async function getAuthenticatedUser() {
     const supabase = await createClient()
-    const { data: { session }, error } = await supabase.auth.getSession()
-    const user = session?.user
+    const { data: { user }, error } = await supabase.auth.getUser()
 
     if (error || !user) {
         return null

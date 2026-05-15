@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser, unauthorizedResponse } from '@/lib/api-utils'
 import { checkRateLimit, rateLimitExceededResponse, rateLimitHeaders } from '@/lib/rate-limit'
@@ -166,8 +167,6 @@ For EACH course (in the same order provided), return a difficulty rating.`
 
         const fullPrompt = `${systemPrompt}\n\n${jsonSchema}\n\nIMPORTANT: Return ONLY valid JSON. No markdown formatting.`
 
-        let result
-
         // Build the prompt content
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let promptContent: any
@@ -206,7 +205,7 @@ For EACH course (in the same order provided), return a difficulty rating.`
         }
 
         // Use gemini-2.5-flash for extraction
-        result = await generateContent(promptContent, 55000)
+        const result = await generateContent(promptContent, 55000)
 
         if (!result || !result.response) {
             throw new Error("Invalid AI response")

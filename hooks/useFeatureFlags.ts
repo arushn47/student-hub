@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -22,7 +23,7 @@ export function useFeatureFlags() {
         try {
             const cached = sessionStorage.getItem('feature-flags')
             if (cached) {
-                // eslint-disable-next-line react-hooks/exhaustive-deps
+                 
                 setFlags(JSON.parse(cached))
                 setIsLoading(false)
                 return

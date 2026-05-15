@@ -188,7 +188,7 @@ export function PaperListItem({ paper, currentUserId, isAdmin, onDelete }: Paper
                                                     height: imgSize.h * zoom,
                                                     position: 'relative',
                                                 } : { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                    { }
                                                     {imageError ? (
                                                         <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 gap-2">
                                                             <FileText className="h-12 w-12 opacity-20" />
