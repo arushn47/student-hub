@@ -31,6 +31,8 @@ interface CalendarViewProps {
     tasks: Task[]
     classes: ClassSchedule[]
     breaks?: SemesterBreak[]
+    semesterStart?: string | null
+    semesterEnd?: string | null
 }
 
 const priorityColors = {
@@ -45,9 +47,17 @@ const priorityLabels = {
     low: 'Low Priority',
 }
 
+// Format date as YYYY-MM-DD using LOCAL timezone (not UTC)
+function toLocalDateStr(date: Date): string {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
+
 // Check if a date is during any break
 function isDateOnBreak(date: Date, breaks: SemesterBreak[]): { onBreak: boolean; breakName?: string } {
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = toLocalDateStr(date)
 
     for (const b of breaks) {
         if (dateStr >= b.start_date && dateStr <= b.end_date) {
@@ -57,7 +67,14 @@ function isDateOnBreak(date: Date, breaks: SemesterBreak[]): { onBreak: boolean;
     return { onBreak: false }
 }
 
-export function CalendarView({ tasks: initialTasks, classes, breaks = [] }: CalendarViewProps) {
+// Check if a date falls within the active semester
+function isDateInSemester(date: Date, semesterStart?: string | null, semesterEnd?: string | null): boolean {
+    if (!semesterStart || !semesterEnd) return true // No semester info = show everything
+    const dateStr = toLocalDateStr(date)
+    return dateStr >= semesterStart && dateStr <= semesterEnd
+}
+
+export function CalendarView({ tasks: initialTasks, classes, breaks = [], semesterStart, semesterEnd }: CalendarViewProps) {
     const [currentMonth, setCurrentMonth] = useState(new Date())
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
     const [tasks, setTasks] = useState<Task[]>(initialTasks)
@@ -84,8 +101,10 @@ export function CalendarView({ tasks: initialTasks, classes, breaks = [] }: Cale
         })
     }
 
-    // Get classes for a specific day of week
-    const getClassesForDay = (dayOfWeek: number) => {
+    // Get classes for a specific date (checks day of week AND semester range)
+    const getClassesForDate = (date: Date) => {
+        const dayOfWeek = getDay(date)
+        if (!isDateInSemester(date, semesterStart, semesterEnd)) return []
         return classes.filter((cls) => cls.day_of_week === dayOfWeek)
     }
 
@@ -156,7 +175,7 @@ export function CalendarView({ tasks: initialTasks, classes, breaks = [] }: Cale
 
     // Selected date details
     const selectedDateTasks = selectedDate ? getTasksForDate(selectedDate) : []
-    const selectedDateClasses = selectedDate ? getClassesForDay(getDay(selectedDate)) : []
+    const selectedDateClasses = selectedDate ? getClassesForDate(selectedDate) : []
     const selectedBreakStatus = selectedDate ? isDateOnBreak(selectedDate, breaks) : { onBreak: false }
 
     return (
@@ -222,7 +241,7 @@ export function CalendarView({ tasks: initialTasks, classes, breaks = [] }: Cale
                             {daysInMonth.map((day) => {
                                 const dayTasks = getTasksForDate(day)
                                 const dayOfWeek = getDay(day)
-                                const dayClasses = getClassesForDay(dayOfWeek)
+                                const dayClasses = getClassesForDate(day)
                                 const isToday = isSameDay(day, new Date())
                                 const isSelected = selectedDate && isSameDay(day, selectedDate)
                                 const breakStatus = isDateOnBreak(day, breaks)
@@ -254,9 +273,9 @@ export function CalendarView({ tasks: initialTasks, classes, breaks = [] }: Cale
                                         </div>
                                         <div className="mt-1 space-y-0.5 overflow-hidden max-h-12">
                                             {breakStatus.onBreak && (
-                                                <div className="flex items-center gap-1">
-                                                    <Palmtree className="w-2 h-2 text-cyan-400" />
-                                                    <span className="text-[10px] text-cyan-400 truncate">Break</span>
+                                                <div className="flex items-center gap-1 mt-1">
+                                                    <Palmtree className="h-3 w-3 text-cyan-500" />
+                                                    <span className="text-[10px] text-cyan-400 truncate" title={breakStatus.breakName}>{breakStatus.breakName || 'Break'}</span>
                                                 </div>
                                             )}
                                             {!breakStatus.onBreak && dayTasks.slice(0, 2).map((task) => (
@@ -473,17 +492,23 @@ export function CalendarView({ tasks: initialTasks, classes, breaks = [] }: Cale
             <div className="flex flex-wrap gap-4 items-center text-sm">
                 <span className="text-gray-400">Legend:</span>
                 <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+                    <span className="text-gray-300">Class</span>
+                </div>
+                <div className="text-gray-600">|</div>
+                <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                    <span className="text-gray-300">High Priority</span>
+                    <span className="text-gray-300">High Priority Task</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
-                    <span className="text-gray-300">Medium Priority</span>
+                    <span className="text-gray-300">Medium Priority Task</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
-                    <span className="text-gray-300">Low Priority</span>
+                    <span className="text-gray-300">Low Priority Task</span>
                 </div>
+                <div className="text-gray-600">|</div>
                 <div className="flex items-center gap-1.5">
                     <Palmtree className="w-3 h-3 text-cyan-400" />
                     <span className="text-gray-300">Break/Holiday</span>

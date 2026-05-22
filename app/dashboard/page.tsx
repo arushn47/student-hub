@@ -72,7 +72,8 @@ function isOnBreak(date: Date, breaks: SemesterBreak[]): { onBreak: boolean; bre
 
 export default async function DashboardPage() {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
 
     // Handle guest mode
     if (!user) {

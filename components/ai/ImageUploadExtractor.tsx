@@ -4,11 +4,11 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Upload, X, Loader2, Sparkles, Clipboard, Cpu } from 'lucide-react'
+import { Upload, X, Loader2, Sparkles, Clipboard } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface ImageUploadExtractorProps {
-    type: 'grades' | 'flashcards' | 'timetable' | 'expenses'
+    type: 'grades' | 'flashcards' | 'timetable' | 'expenses' | 'attendance_portal'
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onExtract: (data: any) => void
     trigger?: React.ReactNode
@@ -27,7 +27,7 @@ export function ImageUploadExtractor({
     const [selectedImages, setSelectedImages] = useState<string[]>([])
     const [files, setFiles] = useState<File[]>([])
     const [loading, setLoading] = useState(false)
-    const [useLocal, setUseLocal] = useState(false)
+
     const [statusText, setStatusText] = useState('')
     const [isDragging, setIsDragging] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -160,72 +160,63 @@ export function ImageUploadExtractor({
                     toast.success('Timetable extracted instantly!')
                     return
                 }
+
+                toast.error('PDF extraction is only supported for Grades and Timetable.')
+                return
             }
 
-            // Offline Image OCR for Timetable
-            if (useLocal && type === 'timetable' && files.length > 0 && files[0]?.type.startsWith('image/')) {
-                setStatusText('Performing local OCR...')
-                try {
+            // Client-side local OCR image extraction (completely bypassing Gemini)
+            if (files.length > 0 && files[0]?.type.startsWith('image/')) {
+                if (type === 'timetable') {
+                    setStatusText('Reading timetable locally...')
                     const { parseTimetableImage } = await import('@/lib/ocr-parser')
                     const data = await parseTimetableImage(files[0])
                     if (data.classes.length > 0) {
                         onExtract(data)
                         setOpen(false)
                         reset()
-                        toast.success('Data extracted locally via OCR!')
+                        toast.success(`Extracted ${data.classes.length} classes from timetable!`)
                     } else {
-                        toast.error('Local OCR found no classes. Try AI mode instead.')
+                        toast.error('Could not read classes from image. Try uploading a clearer photo.')
                     }
                     return
-                } catch (err) {
-                    console.error('Local OCR failed:', err)
-                    toast.error('Local OCR failed. Switching to AI...')
-                    // Fall through to AI
                 }
-            }
 
-            setStatusText(hasPdf ? 'Uploading PDF...' : 'Uploading image to AI...')
-            const formData = new FormData()
-            files.forEach(f => formData.append('image', f))
-            formData.append('type', type)
-
-            const response = await fetch('/api/ai/extract', {
-                method: 'POST',
-                body: formData,
-            })
-
-            if (!response.ok) {
-                let errMsg = `Server error (${response.status})`
-                try {
-                    const result = await response.json()
-                    const errorObj = result.error || result
-                    
-                    if (typeof errorObj === 'string') {
-                        errMsg = errorObj
-                    } else if (typeof errorObj === 'object' && errorObj !== null) {
-                        errMsg = errorObj.message || errorObj.details || JSON.stringify(errorObj)
+                if (type === 'attendance_portal') {
+                    setStatusText('Extracting attendance locally...')
+                    const { parseAttendancePortalImage } = await import('@/lib/ocr-parser')
+                    const data = await parseAttendancePortalImage(files[0])
+                    if (data.courses.length > 0) {
+                        onExtract(data)
+                        setOpen(false)
+                        reset()
+                        toast.success(`Locally extracted ${data.courses.length} courses!`)
+                    } else {
+                        toast.error('Could not extract any course numbers. Please check image clarity.')
                     }
-                } catch {
-                    if (response.status === 504) {
-                        errMsg = 'Request timed out. This is usually due to a slow network connection.'
-                    }
+                    return
                 }
-                throw new Error(errMsg)
-            }
 
-            const result = await response.json()
+                if (type === 'grades') {
+                    setStatusText('Extracting grades locally...')
+                    const { parseGradesImage } = await import('@/lib/ocr-parser')
+                    const data = await parseGradesImage(files[0])
+                    if (data.courses.length > 0) {
+                        onExtract(data)
+                        setOpen(false)
+                        reset()
+                        toast.success(`Locally extracted ${data.courses.length} courses!`)
+                    } else {
+                        toast.error('Could not extract any grades. Please check image clarity.')
+                    }
+                    return
+                }
 
-            if (result.data) {
-                onExtract(result.data)
-                setOpen(false)
-                reset()
-                toast.success('Data extracted successfully!')
-            } else {
-                toast.error('No data found in response')
+                toast.error(`Local extraction is not supported for ${type} images yet.`)
             }
         } catch (error: unknown) {
             console.error('Extraction error:', error instanceof Error ? error.message : error)
-            const errorMessage = error instanceof Error ? error.message : 'Failed to analyze image'
+            const errorMessage = error instanceof Error ? error.message : 'Failed to analyze file'
             toast.error(errorMessage)
         } finally {
             setLoading(false)
@@ -341,26 +332,9 @@ export function ImageUploadExtractor({
                         multiple
                     />
 
+
+
                     <div className="flex justify-between items-center pt-2">
-                        {type === 'timetable' && files.length > 0 && files[0]?.type !== 'application/pdf' && (
-                            <label className="flex items-center gap-2 cursor-pointer group">
-                                <div className="relative">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={useLocal}
-                                        onChange={(e) => setUseLocal(e.target.checked)}
-                                        className="sr-only peer"
-                                    />
-                                    <div className="w-10 h-5 bg-white/5 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-500 after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-500 peer-checked:after:bg-white"></div>
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-xs font-medium text-gray-300 group-hover:text-violet-400 transition-colors flex items-center gap-1">
-                                        <Cpu className="h-3 w-3" /> Offline Mode
-                                    </span>
-                                    <span className="text-[10px] text-gray-500">Fast, local processing</span>
-                                </div>
-                            </label>
-                        )}
                         <div className="flex gap-2 ml-auto">
                             <Button
                                 variant="ghost"

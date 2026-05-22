@@ -112,38 +112,78 @@ function parseMarkdownToDocx(text: string): (Paragraph | Table)[] {
     const nodes: (Paragraph | Table)[] = []
     let tableRows: TableRow[] = []
     let inTable = false
+    let inCodeBlock = false
+    let codeLang = ''
 
-    const parseText = (lineText: string): TextRun[] => {
-        // Split by ** for bold
-        const parts = lineText.split(/(\*\*.*?\*\*)/g)
+    const parseInline = (lineText: string): TextRun[] => {
+        // Handle inline code `...`
+        const parts = lineText.split(/(`[^`]+`|\*\*.*?\*\*)/g)
         return parts.map(part => {
+            if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+                return new TextRun({ text: part.slice(1, -1), font: 'Courier New', size: 18, color: '444444' })
+            }
             if (part.startsWith('**') && part.endsWith('**')) {
-                return new TextRun({
-                    text: part.slice(2, -2),
-                    bold: true
-                })
+                return new TextRun({ text: part.slice(2, -2), bold: true })
             }
             return new TextRun({ text: part })
         })
     }
 
     for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim()
+        const raw = lines[i]
+        const line = raw.trim()
 
-        // Table handling (basic support)
+        // Fenced code block detection
+        if (line.startsWith('```')) {
+            if (!inCodeBlock) {
+                inCodeBlock = true
+                codeLang = line.slice(3).trim()
+                // Add a small "CODE" label
+                if (codeLang) {
+                    nodes.push(new Paragraph({
+                        children: [new TextRun({ text: codeLang.toUpperCase(), font: 'Courier New', size: 16, color: '888888', bold: true })],
+                        spacing: { before: 160, after: 40 },
+                        indent: { left: 360 }
+                    }))
+                }
+            } else {
+                inCodeBlock = false
+                codeLang = ''
+                nodes.push(new Paragraph({ text: '', spacing: { after: 80 } }))
+            }
+            continue
+        }
+
+        if (inCodeBlock) {
+            // Render each code line in monospace, preserving indentation
+            const spaces = raw.match(/^(\s*)/)?.[1] ?? ''
+            const indentChars = spaces.length
+            nodes.push(new Paragraph({
+                children: [new TextRun({
+                    text: raw.replace(/\t/g, '    '), // tabs → 4 spaces
+                    font: 'Courier New',
+                    size: 18,
+                    color: '1a1a2e'
+                })],
+                spacing: { after: 0 },
+                indent: { left: 360 + indentChars * 60 },
+                shading: { fill: 'F4F4F8', type: 'clear' } as never,
+            }))
+            continue
+        }
+
+        // Table handling
         if (line.startsWith('|')) {
             inTable = true
-            // Remove outer pipes if they exist, simple split
-            const rowContent = line.replace(/^\||\|$/g, '')
-            if (line.includes('---')) continue // Skip separator lines like |---|---|
-
+            const rowContent = line.replace(/^\||\\|$/g, '')
+            if (line.includes('---')) continue
             const cells = rowContent.split('|').map(c => new TableCell({
-                children: [new Paragraph({ children: parseText(c.trim()) })],
+                children: [new Paragraph({ children: parseInline(c.trim()) })],
                 borders: {
-                    top: { style: BorderStyle.SINGLE, size: 1, color: "cccccc" },
-                    bottom: { style: BorderStyle.SINGLE, size: 1, color: "cccccc" },
-                    left: { style: BorderStyle.SINGLE, size: 1, color: "cccccc" },
-                    right: { style: BorderStyle.SINGLE, size: 1, color: "cccccc" },
+                    top: { style: BorderStyle.SINGLE, size: 1, color: 'cccccc' },
+                    bottom: { style: BorderStyle.SINGLE, size: 1, color: 'cccccc' },
+                    left: { style: BorderStyle.SINGLE, size: 1, color: 'cccccc' },
+                    right: { style: BorderStyle.SINGLE, size: 1, color: 'cccccc' },
                 },
                 margins: { top: 100, bottom: 100, left: 100, right: 100 }
             }))
@@ -151,45 +191,43 @@ function parseMarkdownToDocx(text: string): (Paragraph | Table)[] {
             continue
         } else if (inTable) {
             if (tableRows.length > 0) {
-                nodes.push(new Table({
-                    rows: tableRows,
-                    width: { size: 100, type: WidthType.PERCENTAGE }
-                }))
-                nodes.push(new Paragraph({ text: "" })) // Spacer
+                nodes.push(new Table({ rows: tableRows, width: { size: 100, type: WidthType.PERCENTAGE } }))
+                nodes.push(new Paragraph({ text: '' }))
             }
             tableRows = []
             inTable = false
         }
 
-        // List handling
-        if (line.startsWith('- ') || line.startsWith('* ')) {
-            nodes.push(new Paragraph({
-                children: parseText(line.slice(2)),
-                bullet: { level: 0 }
-            }))
+        // Headings
+        if (line.startsWith('# ')) {
+            nodes.push(new Paragraph({ children: parseInline(line.slice(2)), heading: HeadingLevel.HEADING_1, spacing: { before: 300, after: 120 } }))
+        } else if (line.startsWith('## ')) {
+            nodes.push(new Paragraph({ children: parseInline(line.slice(3)), heading: HeadingLevel.HEADING_2, spacing: { before: 240, after: 100 } }))
         } else if (line.startsWith('### ')) {
-            nodes.push(new Paragraph({
-                children: parseText(line.slice(4)),
-                heading: HeadingLevel.HEADING_3,
-                spacing: { before: 200, after: 100 }
-            }))
-        } else if (line.length > 0) {
-            nodes.push(new Paragraph({
-                children: parseText(line),
-                spacing: { after: 120 }
-            }))
+            nodes.push(new Paragraph({ children: parseInline(line.slice(4)), heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 80 } }))
+        }
+        // Numbered list
+        else if (/^\d+\.\s/.test(line)) {
+            const content = line.replace(/^\d+\.\s/, '')
+            nodes.push(new Paragraph({ children: parseInline(content), numbering: { reference: 'default', level: 0 }, spacing: { after: 80 } }))
+        }
+        // Bullet list
+        else if (line.startsWith('- ') || line.startsWith('* ')) {
+            nodes.push(new Paragraph({ children: parseInline(line.slice(2)), bullet: { level: 0 }, spacing: { after: 60 } }))
+        }
+        // Normal paragraph
+        else if (line.length > 0) {
+            nodes.push(new Paragraph({ children: parseInline(line), spacing: { after: 120 } }))
         }
     }
 
     if (inTable && tableRows.length > 0) {
-        nodes.push(new Table({
-            rows: tableRows,
-            width: { size: 100, type: WidthType.PERCENTAGE }
-        }))
+        nodes.push(new Table({ rows: tableRows, width: { size: 100, type: WidthType.PERCENTAGE } }))
     }
 
     return nodes
 }
+
 
 // Export Q&A as professional Word Document
 async function exportToWord(subjectName: string, modules: Module[], questions: Question[]) {
@@ -311,10 +349,11 @@ export default function SubjectDetailPage() {
     
     const fetchData = useCallback(async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
             if (!user) return
 
-            // Fetch subject
+            // Fetch subject first to validate it exists
             const { data: subjectData } = await supabase
                 .from('exam_subjects')
                 .select('*')
@@ -337,39 +376,25 @@ export default function SubjectDetailPage() {
 
             setModules(modulesData || [])
 
-            // Fetch questions
+            // Fetch all dependent data in parallel once we have module IDs
             const moduleIds = modulesData?.map(m => m.id) || []
             if (moduleIds.length > 0) {
-                const { data: questionsData } = await supabase
-                    .from('exam_questions')
-                    .select('*')
-                    .in('module_id', moduleIds)
+                const [questionsResult, flashcardsResult, filesResult] = await Promise.all([
+                    supabase.from('exam_questions').select('*').in('module_id', moduleIds),
+                    supabase.from('exam_flashcards').select('*').in('module_id', moduleIds),
+                    supabase.from('exam_module_files').select('*').in('module_id', moduleIds).order('created_at', { ascending: false }),
+                ])
 
-                setQuestions(questionsData || [])
-
-                // Fetch flashcards
-                const { data: flashcardsData } = await supabase
-                    .from('exam_flashcards')
-                    .select('*')
-                    .in('module_id', moduleIds)
-
-                setFlashcards(flashcardsData || [])
-
-                // Fetch module files
-                const { data: filesData } = await supabase
-                    .from('exam_module_files')
-                    .select('*')
-                    .in('module_id', moduleIds)
-                    .order('created_at', { ascending: false })
-
-                setModuleFiles(filesData || [])
+                setQuestions(questionsResult.data || [])
+                setFlashcards(flashcardsResult.data || [])
+                setModuleFiles(filesResult.data || [])
             }
         } catch (error) {
             console.error('Error fetching data:', error)
         } finally {
             setLoading(false)
         }
-    }, [subjectId, supabase, router])
+    }, [subjectId, router])
 
     useEffect(() => {
         fetchData()
@@ -412,7 +437,8 @@ export default function SubjectDetailPage() {
 
         setUploading(moduleId)
         try {
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
             if (!user) throw new Error('Not authenticated')
 
             const uploadedPaths: string[] = []
@@ -659,7 +685,7 @@ export default function SubjectDetailPage() {
                     <CardContent className="pt-0 pb-4 animate-in slide-in-from-top-2">
                         <div className="space-y-2">
                             <p className="text-xs text-muted-foreground">
-                                Paste the **syllabus**, **midterm/endterm important questions**, or **recurring themes** here.
+                                Paste the <strong>syllabus</strong>, <strong>midterm/endterm important questions</strong>, or <strong>recurring themes</strong> here.
                                 This context will be used for EVERY module generation in this subject.
                             </p>
                             <Textarea
@@ -729,7 +755,7 @@ export default function SubjectDetailPage() {
                     </TabsTrigger>
                     <TabsTrigger value="notes" className="gap-2">
                         <FileText className="h-4 w-4" />
-                        <span className="hidden sm:inline">Summary</span>
+                        <span className="hidden sm:inline">Short Notes</span>
                     </TabsTrigger>
                 </TabsList>
 
@@ -1216,25 +1242,28 @@ function FlashcardStudy({ flashcards }: { flashcards: Flashcard[] }) {
 
             {/* Card */}
             <div
-                className="relative h-64 cursor-pointer perspective-1000"
+                className="relative h-96 sm:h-[28rem] cursor-pointer perspective-1000 w-full"
                 onClick={() => setFlipped(!flipped)}
             >
                 <div className={cn(
-                    "absolute inset-0 transition-transform duration-500 preserve-3d",
+                    "absolute inset-0 transition-transform duration-500 preserve-3d w-full h-full",
                     flipped && "rotate-y-180"
                 )}>
                     {/* Front */}
-                    <Card className="absolute inset-0 glass-card backface-hidden flex items-center justify-center p-6">
-                        <div className="text-center">
-                            <p className="text-lg font-medium">{currentCard?.front}</p>
-                            <p className="text-sm text-muted-foreground mt-4">Click to flip</p>
+                    <Card className="absolute inset-0 glass-card backface-hidden flex flex-col items-center justify-center p-6 sm:p-10 overflow-y-auto">
+                        <div className="text-center w-full my-auto">
+                            <p className="text-lg sm:text-xl font-medium">{currentCard?.front}</p>
                         </div>
+                        <p className="text-sm text-muted-foreground mt-4 shrink-0">Click to flip</p>
                     </Card>
 
                     {/* Back */}
-                    <Card className="absolute inset-0 glass-card backface-hidden rotate-y-180 flex items-center justify-center p-6 border-violet-500/30">
-                        <div className="text-center">
-                            <p className="text-lg">{currentCard?.back}</p>
+                    <Card className="absolute inset-0 glass-card backface-hidden rotate-y-180 flex flex-col p-6 sm:p-10 border-violet-500/30 overflow-y-auto">
+                        <div className="w-full my-auto text-left">
+                            <MarkdownRenderer
+                                content={currentCard?.back || ''}
+                                variant="exam"
+                            />
                         </div>
                     </Card>
                 </div>

@@ -66,6 +66,29 @@ export async function POST(req: NextRequest) {
         let jsonSchema = ''
 
         switch (type) {
+            case 'attendance_portal':
+                systemPrompt = hasOcrText
+                    ? `Analyze this OCR-extracted text from a university student attendance portal page (e.g., VIT Bhopal - VTOP attendance table).
+Extract the courses, along with their attended classes/days and total conducted classes.
+
+Each course entry should contain:
+- course code (e.g., CDS3005, CSE3009, etc.)
+- course name (e.g., Foundations of Data Science, Internet of Things, etc.)
+- attended classes count
+- total classes count
+
+OCR TEXT:
+\${text}`
+                    : `Analyze this screenshot of a university student attendance portal page (e.g., VIT Bhopal - VTOP attendance table).
+Scan the table very carefully and extract EVERY SINGLE COURSE along with their:
+1. Course Code (e.g., CDS3005, CSE3009, etc.) and Course Name (e.g., Foundations of Data Science)
+2. Attended Classes/Days (number of classes present or attended)
+3. Total Conducted Classes (number of total classes held)
+
+Typically, the columns are like "Course Detail" (which holds code & name), "Attended Classes" or "Classes Attended", and "Total Classes" or "Conducted Classes".
+Extract all rows of courses in the table.`;
+                jsonSchema = 'Return JSON: { "courses": [{ "code": "string (e.g. CDS3005)", "name": "string (e.g. Foundations of Data Science)", "attended": number, "total": number }] }'
+                break
             case 'grades':
                 const categoryMappingInstructions = `
 IMPORTANT - CATEGORY MAPPING (Course Distribution):

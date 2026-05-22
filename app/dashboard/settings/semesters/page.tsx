@@ -55,6 +55,7 @@ export default function SemesterSettingsPage() {
     const [semesters, setSemesters] = useState<Semester[]>([])
     const [breaks, setBreaks] = useState<SemesterBreak[]>([])
     const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
     const [userId, setUserId] = useState<string | null>(null)
 
     // Dialogs
@@ -80,7 +81,8 @@ export default function SemesterSettingsPage() {
     
     const fetchData = useCallback(async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { session } } = await supabase.auth.getSession()
+            const user = session?.user
             if (!user) return
             setUserId(user.id)
 
@@ -110,6 +112,14 @@ export default function SemesterSettingsPage() {
             return
         }
 
+        const semStart = new Date(semesterForm.start_date)
+        const semEnd = new Date(semesterForm.end_date)
+        if (semStart > semEnd) {
+            toast.error('Semester start date cannot be after end date')
+            return
+        }
+
+        setSaving(true)
         try {
             if (editingSemester) {
                 const { error } = await supabase
@@ -145,6 +155,8 @@ export default function SemesterSettingsPage() {
         } catch (error) {
             console.error('Error saving semester:', error)
             toast.error('Failed to save semester')
+        } finally {
+            setSaving(false)
         }
     }
 
@@ -186,6 +198,26 @@ export default function SemesterSettingsPage() {
             return
         }
 
+        const breakStart = new Date(breakForm.start_date)
+        const breakEnd = new Date(breakForm.end_date)
+        
+        if (breakStart > breakEnd) {
+            toast.error('Break start date cannot be after end date')
+            return
+        }
+
+        const semester = semesters.find(s => s.id === selectedSemesterForBreak)
+        if (semester) {
+            const semStart = new Date(semester.start_date)
+            const semEnd = new Date(semester.end_date)
+            
+            if (breakStart < semStart || breakEnd > semEnd) {
+                toast.error(`Break must be between ${format(semStart, 'MMM d, yyyy')} and ${format(semEnd, 'MMM d, yyyy')}`)
+                return
+            }
+        }
+
+        setSaving(true)
         try {
             if (editingBreak) {
                 const { error } = await supabase
@@ -223,6 +255,8 @@ export default function SemesterSettingsPage() {
         } catch (error) {
             console.error('Error saving break:', error)
             toast.error('Failed to save break')
+        } finally {
+            setSaving(false)
         }
     }
 
@@ -343,6 +377,7 @@ export default function SemesterSettingsPage() {
                         const semesterBreaks = breaks.filter(b => b.semester_id === semester.id)
                         const isCurrent = isCurrentSemester(semester)
                         const daysLeft = differenceInDays(parseISO(semester.end_date), new Date())
+                        const isCompleted = parseISO(semester.end_date) < new Date()
 
                         return (
                             <Card
@@ -367,12 +402,17 @@ export default function SemesterSettingsPage() {
                                             <div>
                                                 <CardTitle className="text-lg flex items-center gap-2">
                                                     {semester.name}
-                                                    {semester.is_active && (
+                                                    {semester.is_active && !isCompleted && (
                                                         <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">
                                                             Active
                                                         </span>
                                                     )}
-                                                    {isCurrent && !semester.is_active && (
+                                                    {isCompleted && (
+                                                        <span className="text-xs bg-gray-500/20 text-gray-400 px-2 py-0.5 rounded-full">
+                                                            Completed
+                                                        </span>
+                                                    )}
+                                                    {isCurrent && !semester.is_active && !isCompleted && (
                                                         <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">
                                                             Current
                                                         </span>
@@ -526,7 +566,8 @@ export default function SemesterSettingsPage() {
                                 />
                             </div>
                         </div>
-                        <Button onClick={saveSemester} className="w-full bg-gradient-to-r from-purple-500 to-pink-500">
+                        <Button onClick={saveSemester} disabled={saving} className="w-full bg-gradient-to-r from-purple-500 to-pink-500">
+                            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                             {editingSemester ? 'Update Semester' : 'Create Semester'}
                         </Button>
                     </div>
@@ -588,7 +629,8 @@ export default function SemesterSettingsPage() {
                                 />
                             </div>
                         </div>
-                        <Button onClick={saveBreak} className="w-full bg-gradient-to-r from-purple-500 to-pink-500">
+                        <Button onClick={saveBreak} disabled={saving} className="w-full bg-gradient-to-r from-purple-500 to-pink-500">
+                            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                             {editingBreak ? 'Update Break' : 'Add Break'}
                         </Button>
                     </div>

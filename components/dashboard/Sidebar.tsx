@@ -225,10 +225,24 @@ export function Sidebar({ user }: SidebarProps) {
         const { isAdmin } = useAuth()
     const { isEnabled: isFeatureEnabled } = useFeatureFlags()
 
-    const handleLogout = async () => {
-        await supabase.auth.signOut()
-        router.push('/login')
-        router.refresh()
+    const handleLogout = () => {
+        console.log('[LOGOUT] Firing signOut and redirecting immediately')
+        // Fire-and-forget: clear local session without awaiting
+        supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+        // Nuke all Supabase auth cookies manually to guarantee middleware
+        // sees no session (even if signOut hasn't resolved yet)
+        document.cookie.split(';').forEach(c => {
+            const name = c.trim().split('=')[0]
+            if (name.startsWith('sb-')) {
+                document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
+            }
+        })
+        // Also clear localStorage/sessionStorage auth keys
+        Object.keys(localStorage).forEach(k => {
+            if (k.startsWith('sb-')) localStorage.removeItem(k)
+        })
+        // Redirect immediately
+        window.location.href = '/login'
     }
 
     // Filter nav items by feature flags (admins bypass)
@@ -360,7 +374,10 @@ export function Sidebar({ user }: SidebarProps) {
                                 <Settings className="mr-2 h-4 w-4" />
                                 Settings
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleLogout} className="text-rose-500 focus:bg-rose-500/10 focus:text-rose-500 cursor-pointer">
+                            <DropdownMenuItem
+                                onSelect={(e) => { e.preventDefault(); handleLogout() }}
+                                className="text-rose-500 focus:bg-rose-500/10 focus:text-rose-500 cursor-pointer"
+                            >
                                 <LogOut className="mr-2 h-4 w-4" />
                                 Logout
                             </DropdownMenuItem>
@@ -391,10 +408,19 @@ export function MobileSidebar({ user }: SidebarProps) {
         const { isAdmin } = useAuth()
     const { isEnabled: isFeatureEnabled } = useFeatureFlags()
 
-    const handleLogout = async () => {
-        await supabase.auth.signOut()
-        router.push('/login')
-        router.refresh()
+    const handleLogout = () => {
+        console.log('[LOGOUT-MOBILE] Firing signOut and redirecting immediately')
+        supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+        document.cookie.split(';').forEach(c => {
+            const name = c.trim().split('=')[0]
+            if (name.startsWith('sb-')) {
+                document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
+            }
+        })
+        Object.keys(localStorage).forEach(k => {
+            if (k.startsWith('sb-')) localStorage.removeItem(k)
+        })
+        window.location.href = '/login'
     }
 
     // Filter nav items by feature flags (admins bypass)

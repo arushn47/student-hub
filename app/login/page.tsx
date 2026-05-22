@@ -70,9 +70,9 @@ export default function LoginPage() {
             <Card className="w-full max-w-md relative bg-black/40 backdrop-blur-xl border-white/10">
                 <CardHeader className="space-y-1 text-center">
                     <div className="flex justify-center mb-4">
-                        <div className="p-3 rounded-full bg-linear-to-r from-purple-500 to-pink-500">
+                        <Link href="/" className="p-3 rounded-full bg-linear-to-r from-purple-500 to-pink-500 hover:scale-110 transition-transform" title="Back to home">
                             <GraduationCap className="h-8 w-8 text-white" />
-                        </div>
+                        </Link>
                     </div>
                     <CardTitle className="text-2xl font-bold text-white">Welcome back</CardTitle>
                     <CardDescription className="text-gray-400">

@@ -62,7 +62,8 @@ export default function SettingsPage() {
     }, [searchParams])
 
     const loadProfile = useCallback(async () => {
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
         if (!user) return
 
         const { data: initialData, error } = await supabase
@@ -127,7 +128,8 @@ export default function SettingsPage() {
 
     const updateProfile = async (updates: Partial<UserProfile>) => {
         setSaving(true)
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
         if (!user) return
 
         const { error } = await supabase
@@ -233,7 +235,8 @@ export default function SettingsPage() {
                             onValueChange={async (val) => {
                                 updatePreference('degree_type', val)
                                 // Clear old curriculum requirements so it regenerates on the Grades page
-                                const { data: { user } } = await supabase.auth.getUser()
+                                const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
                                 if (user) {
                                     await supabase.from('degree_requirements').delete().eq('user_id', user.id)
                                 }

@@ -5,73 +5,98 @@ import { Button } from '@/components/ui/button'
 import {
     FileText,
     CheckSquare,
-    Calendar,
     Timer,
     GraduationCap,
-    Brain,
+    BookOpen,
     Sparkles,
     ArrowRight,
-    Target,
     Bell,
-    ChevronRight
+    ChevronRight,
+    BarChart3,
+    Clock,
+    BookMarked,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const features = [
     {
-        icon: FileText,
-        title: 'Smart Notes',
-        description: 'AI-powered note-taking with auto-summaries, quizzes, and speech-to-text',
+        icon: BarChart3,
+        title: 'Grade Simulator',
+        description: 'See what your CGPA can realistically reach. Simulate grade changes across subjects and instantly know your ceiling before exams — no spreadsheets needed.',
         color: 'from-violet-500 to-purple-500',
         bgColor: 'bg-violet-500/10',
         borderColor: 'border-violet-500/20',
     },
     {
-        icon: CheckSquare,
-        title: 'Task Management',
-        description: 'Kanban boards and intelligent task prioritization to stay organized',
+        icon: Sparkles,
+        title: 'GPA Improvement Advisor',
+        description: 'Not all grade improvements are equal. StudentHub ranks which subjects would give you the highest CGPA boost if you appeared for supply — so you focus on the right ones.',
         color: 'from-amber-500 to-orange-500',
         bgColor: 'bg-amber-500/10',
         borderColor: 'border-amber-500/20',
     },
     {
-        icon: GraduationCap,
-        title: 'Exam Prep',
-        description: 'AI generates practice questions, flashcards, and study guides from your notes',
-        color: 'from-emerald-500 to-teal-500',
-        bgColor: 'bg-emerald-500/10',
-        borderColor: 'border-emerald-500/20',
-    },
-    {
-        icon: Timer,
-        title: 'Pomodoro Timer',
-        description: 'Stay focused with customizable work sessions and break reminders',
+        icon: BookMarked,
+        title: 'Question Papers Bank',
+        description: 'Past papers are hard to find — people rarely share them. StudentHub gives you a shared, searchable bank of question papers by subject, year, and exam type.',
         color: 'from-rose-500 to-pink-500',
         bgColor: 'bg-rose-500/10',
         borderColor: 'border-rose-500/20',
     },
     {
-        icon: Calendar,
-        title: 'Smart Calendar',
-        description: 'Class schedules, assignments, and tasks all in one unified view',
-        color: 'from-cyan-500 to-blue-500',
-        bgColor: 'bg-cyan-500/10',
-        borderColor: 'border-cyan-500/20',
+        icon: Clock,
+        title: 'Attendance Tracker',
+        description: 'Log attendance per subject and simulate how many more classes you can skip before falling below 75%. Know your limit before you hit it.',
+        color: 'from-sky-500 to-cyan-500',
+        bgColor: 'bg-sky-500/10',
+        borderColor: 'border-sky-500/20',
     },
     {
-        icon: Bell,
-        title: 'Reminders',
-        description: 'Never miss a deadline with smart push notifications',
+        icon: GraduationCap,
+        title: 'Exam Prep',
+        description: 'Generate practice questions and topic breakdowns from your notes. Useful when you actually have notes — still a work in progress.',
+        color: 'from-indigo-500 to-violet-500',
+        bgColor: 'bg-indigo-500/10',
+        borderColor: 'border-indigo-500/20',
+    },
+    {
+        icon: FileText,
+        title: 'Notes',
+        description: 'Rich markdown notes with summaries and quiz generation. Turn what you wrote in class into something you can actually revise from.',
+        color: 'from-emerald-500 to-teal-500',
+        bgColor: 'bg-emerald-500/10',
+        borderColor: 'border-emerald-500/20',
+    },
+    {
+        icon: CheckSquare,
+        title: 'Tasks',
+        description: "Kanban-style task boards with deadlines, priorities, and subject labels. See everything due this week at a glance.",
         color: 'from-fuchsia-500 to-purple-500',
         bgColor: 'bg-fuchsia-500/10',
         borderColor: 'border-fuchsia-500/20',
     },
+    {
+        icon: Timer,
+        title: 'Pomodoro Timer',
+        description: 'Customizable focus sessions with work/break intervals. Stay in flow without burning out.',
+        color: 'from-orange-500 to-red-500',
+        bgColor: 'bg-orange-500/10',
+        borderColor: 'border-orange-500/20',
+    },
+    {
+        icon: Bell,
+        title: 'Reminders & Calendar',
+        description: 'Set reminders for exams, assignments and personal deadlines. Everything in one calendar view.',
+        color: 'from-lime-500 to-green-500',
+        bgColor: 'bg-lime-500/10',
+        borderColor: 'border-lime-500/20',
+    },
 ]
 
 const stats = [
-    { value: '10+', label: 'Study Tools' },
-    { value: 'AI', label: 'Powered' },
-    { value: '24/7', label: 'Available' },
+    { value: '8+', label: 'Tools' },
+    { value: 'CGPA', label: 'Simulator' },
+    { value: 'Free', label: 'Question Papers' },
 ]
 
 export default function LandingPage() {
@@ -122,29 +147,29 @@ export default function LandingPage() {
                 <div className="max-w-7xl mx-auto text-center">
                     {/* Badge */}
                     <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/10 border border-purple-500/20 mb-8">
-                        <Sparkles className="h-4 w-4 text-purple-400" />
-                        <span className="text-sm text-purple-300">AI-Powered Student Productivity</span>
+                        <BookOpen className="h-4 w-4 text-purple-400" />
+                        <span className="text-sm text-purple-300">Built for VIT students</span>
                     </div>
 
                     {/* Main Heading */}
                     <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-foreground mb-6 leading-tight">
-                        Your Ultimate
+                        One Place for
                         <span className="block bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-                            Study Companion
+                            Everything Academic
                         </span>
                     </h1>
 
                     {/* Subheading */}
                     <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
-                        Notes, tasks, exam prep, and focus tools — all powered by AI.
-                        Everything you need to ace your studies in one beautiful app.
+                        Grades, timetable, notes, tasks, attendance, and past papers —
+                        all in one dashboard. No more switching between ten different apps.
                     </p>
 
                     {/* CTA Buttons */}
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
                         <Link href="/signup">
                             <Button size="lg" className="w-full sm:w-auto bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white text-lg px-8 py-6 rounded-xl shadow-lg shadow-purple-500/25 transition-all hover:shadow-purple-500/40 hover:scale-105">
-                                Get Started
+                                Get Started Free
                                 <ArrowRight className="ml-2 h-5 w-5" />
                             </Button>
                         </Link>
@@ -175,11 +200,11 @@ export default function LandingPage() {
                 <div className="max-w-7xl mx-auto">
                     <div className="text-center mb-16">
                         <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
-                            Everything You Need to
-                            <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent"> Excel</span>
+                            Every Tool You Actually
+                            <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent"> Need</span>
                         </h2>
                         <p className="text-muted-foreground max-w-2xl mx-auto">
-                            Powerful tools designed specifically for students, enhanced with AI to save you time.
+                            StudentHub replaces the scattered mess of apps, PDFs, and spreadsheets with one cohesive workspace built around how students actually study.
                         </p>
                     </div>
 
@@ -215,35 +240,36 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* AI Study Buddy Section */}
+            {/* Grade Tracker Highlight Section */}
             <section className="relative z-10 py-20 px-4 sm:px-6 lg:px-8 border-t border-border/50">
                 <div className="max-w-7xl mx-auto">
                     <div className="grid lg:grid-cols-2 gap-12 items-center">
                         <div>
-                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
-                                <Brain className="h-4 w-4 text-emerald-400" />
-                                <span className="text-sm text-emerald-300">AI-Powered</span>
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/20 mb-6">
+                                <Sparkles className="h-4 w-4 text-violet-400" />
+                                <span className="text-sm text-violet-300">Smart Grade Tracking</span>
                             </div>
                             <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-6">
-                                Meet Your Personal
-                                <span className="block bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-                                    Study Buddy
+                                Know Exactly Where
+                                <span className="block bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
+                                    You Stand
                                 </span>
                             </h2>
                             <p className="text-muted-foreground mb-8">
-                                An AI assistant that understands your courses, helps explain concepts,
-                                generates practice questions, and keeps you motivated throughout your study sessions.
+                                Upload your VIT grade history PDF and StudentHub parses it automatically —
+                                calculating your CGPA, mapping courses to your curriculum distribution,
+                                and showing exactly how many more credits you need in each category.
                             </p>
                             <ul className="space-y-4">
                                 {[
-                                    'Explain complex topics in simple terms',
-                                    'Generate quizzes from your notes',
-                                    'Create flashcards automatically',
-                                    'Answer questions 24/7',
+                                    'Auto-parse VIT grade PDFs — no manual entry',
+                                    'Live CGPA & semester-wise SGPA',
+                                    'Curriculum distribution tracking (B.Tech & M.Tech)',
+                                    'Grade improvement advisor for supply/backlog planning',
                                 ].map((item, index) => (
                                     <li key={index} className="flex items-center gap-3">
-                                        <div className="h-6 w-6 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                                            <Sparkles className="h-3 w-3 text-emerald-400" />
+                                        <div className="h-6 w-6 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0">
+                                            <ChevronRight className="h-3 w-3 text-violet-400" />
                                         </div>
                                         <span className="text-muted-foreground">{item}</span>
                                     </li>
@@ -251,29 +277,28 @@ export default function LandingPage() {
                             </ul>
                         </div>
                         <div className="relative">
-                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 rounded-3xl blur-3xl" />
-                            <div className="relative bg-card/50 backdrop-blur-xl border border-border rounded-2xl p-6">
-                                <div className="flex items-center gap-3 mb-4">
-                                    <div className="p-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500">
-                                        <Brain className="h-5 w-5 text-white" />
+                            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/20 to-purple-500/20 rounded-3xl blur-3xl" />
+                            <div className="relative bg-card/50 backdrop-blur-xl border border-border rounded-2xl p-6 space-y-3">
+                                {[
+                                    { label: 'Programme Core', earned: 55, total: 55, pct: 100, color: 'bg-emerald-500' },
+                                    { label: 'Programme Elective', earned: 12, total: 15, pct: 80, color: 'bg-violet-500' },
+                                    { label: 'UC - Natural Science Core', earned: 23, total: 23, pct: 100, color: 'bg-emerald-500' },
+                                    { label: 'UC - Skill Development', earned: 10, total: 14, pct: 71, color: 'bg-amber-500' },
+                                    { label: 'UC - Project and Internships', earned: 3, total: 17, pct: 18, color: 'bg-rose-500' },
+                                ].map((row, i) => (
+                                    <div key={i}>
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span className="text-muted-foreground truncate pr-2">{row.label}</span>
+                                            <span className="text-foreground font-medium flex-shrink-0">{row.earned}/{row.total}</span>
+                                        </div>
+                                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                                            <div className={cn("h-full rounded-full transition-all", row.color)} style={{ width: `${row.pct}%` }} />
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="font-medium text-foreground">Study Buddy</p>
-                                        <p className="text-xs text-muted-foreground">Always here to help</p>
-                                    </div>
-                                </div>
-                                <div className="space-y-3">
-                                    <div className="bg-muted/50 rounded-lg rounded-bl-none p-3">
-                                        <p className="text-sm text-muted-foreground">
-                                            Can you explain the concept of recursion in simple terms?
-                                        </p>
-                                    </div>
-                                    <div className="bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 rounded-lg rounded-br-none p-3">
-                                        <p className="text-sm text-foreground">
-                                            Think of recursion like a Russian nesting doll 🪆 — each doll contains a smaller version of itself.
-                                            In programming, a function calls itself with a simpler version of the problem until it reaches the simplest case!
-                                        </p>
-                                    </div>
+                                ))}
+                                <div className="pt-2 border-t border-border flex justify-between">
+                                    <span className="text-sm font-medium text-foreground">CGPA</span>
+                                    <span className="text-sm font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">8.44</span>
                                 </div>
                             </div>
                         </div>
@@ -288,15 +313,15 @@ export default function LandingPage() {
                         <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-purple-500/20 rounded-3xl blur-3xl" />
                         <div className="relative bg-card/30 backdrop-blur-xl border border-border rounded-3xl p-8 sm:p-12">
                             <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
-                                Ready to Transform Your
-                                <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent"> Study Routine?</span>
+                                Stop Managing University
+                                <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent"> Across 10 Tabs</span>
                             </h2>
                             <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
-                                Join thousands of students who are already studying smarter, not harder.
+                                Everything from your grades to your timetable to your next exam deadline — in one place, always.
                             </p>
                             <Link href="/signup">
                                 <Button size="lg" className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white text-lg px-10 py-6 rounded-xl shadow-lg shadow-purple-500/25 transition-all hover:shadow-purple-500/40 hover:scale-105">
-                                    Get Started
+                                    Get Started Free
                                     <ArrowRight className="ml-2 h-5 w-5" />
                                 </Button>
                             </Link>
@@ -315,7 +340,7 @@ export default function LandingPage() {
                         <span className="font-semibold text-foreground">StudentHub</span>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                        © 2026 StudentHub. Built for students, by students.
+                        © 2026 StudentHub · Built by Arush Nandakumar Menon
                     </p>
                 </div>
             </footer>

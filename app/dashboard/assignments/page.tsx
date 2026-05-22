@@ -132,7 +132,8 @@ export default function AssignmentsPage() {
 
     const fetchAssignments = async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
             if (!user) return
 
             const { data, error } = await supabase
@@ -193,7 +194,8 @@ export default function AssignmentsPage() {
 
         setCreating(true)
         try {
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
             if (!user) throw new Error('Not authenticated')
 
             const { error } = await supabase

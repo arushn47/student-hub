@@ -31,6 +31,45 @@ const DISTRIBUTION_MAP: Record<string, string> = {
 // e.g. "UCSD" + "C" → "UCSDC", "UCHSS" + "MC" → "UCHSSMC"
 const DISTRIBUTION_SUFFIXES = new Set(['C', 'MC', 'ME', 'SE'])
 
+function isDistributionCode(token: string): boolean {
+    const upper = token.toUpperCase().trim();
+    if (!upper) return false;
+    if (DISTRIBUTION_MAP[upper]) return true;
+    if (DISTRIBUTION_SUFFIXES.has(upper)) return true;
+    
+    // VIT Category codes generally follow: UC*, UE*, PC, PE, NMC, OE
+    // Ensure we don't accidentally match normal English words in titles
+    if (/^(UC|UE|PC|PE|NMC|OE)[A-Z]{0,6}$/.test(upper)) {
+        // Exclude some common English words that start with these prefixes
+        const commonWords = ['PEACE', 'PEAR', 'PEAK', 'PEER', 'PEN', 'PET', 'PER', 'PEAT', 'PEST', 'OVEN'];
+        if (!commonWords.includes(upper)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function getCategoryName(code: string): string {
+    const upper = code.toUpperCase().trim();
+    if (!upper) return 'none';
+    if (DISTRIBUTION_MAP[upper]) return DISTRIBUTION_MAP[upper];
+    
+    // Explicit variants
+    if (upper === 'UEME') return 'University Elective - Multidisciplinary';
+    if (upper === 'UEOE') return 'University Elective - Open Electives';
+    
+    // Fallback mapping based on prefixes to STRICT valid category strings.
+    // If it returns a string not in the predefined list, the UI dropdown goes blank.
+    if (upper.startsWith('PC')) return 'Programme Core';
+    if (upper.startsWith('PE')) return 'Programme Elective';
+    if (upper.startsWith('NMC')) return 'Non-Graded Mandatory Courses';
+    if (upper.startsWith('OE')) return 'University Elective - Open Electives';
+    if (upper.startsWith('UC')) return 'University Core - Skill Development'; // generic fallback
+    if (upper.startsWith('UE')) return 'University Elective - Open Electives'; // generic fallback
+    
+    return 'none';
+}
+
 // Valid grades
 const VALID_GRADES = new Set(['S', 'A', 'B', 'C', 'D', 'E', 'F', 'O', 'P'])
 
@@ -229,8 +268,7 @@ export async function parseGradesPDF(file: File): Promise<{ courses: ParsedCours
             return false
         }
         if (/^\d+(\.\d)?$/.test(trimmed)) return true
-        if (DISTRIBUTION_MAP[upper]) return true
-        if (DISTRIBUTION_SUFFIXES.has(upper)) return true
+        if (isDistributionCode(trimmed)) return true
         if (/^\d+$/.test(trimmed)) return true
         if (/\d{1,2}-\w{3}-\d{4}/.test(trimmed)) return true
         if (/\d{1,2}-\d{1,2}-\d{4}/.test(trimmed)) return true
@@ -274,7 +312,7 @@ export async function parseGradesPDF(file: File): Promise<{ courses: ParsedCours
         for (let i = 0; i < rawParts.length; i++) {
             if (i + 1 < rawParts.length) {
                 const merged = rawParts[i] + rawParts[i + 1]
-                if (DISTRIBUTION_MAP[merged.toUpperCase()]) {
+                if (isDistributionCode(merged)) {
                     parts.push(merged)
                     i++
                     continue
@@ -300,7 +338,7 @@ export async function parseGradesPDF(file: File): Promise<{ courses: ParsedCours
             const upperPart = part.toUpperCase().trim()
 
             // Check for distribution code
-            if (DISTRIBUTION_MAP[upperPart]) {
+            if (isDistributionCode(upperPart) && !DISTRIBUTION_SUFFIXES.has(upperPart)) {
                 distribution = upperPart
                 continue
             }
@@ -401,10 +439,7 @@ export async function parseGradesPDF(file: File): Promise<{ courses: ParsedCours
         // Extract meaningful candidate text
         const parts = lineText.split('\t').map(p => p.trim()).filter(Boolean)
         const validTitleParts = parts.filter(p => !isNonTitleToken(p))
-        const hasDistributionPart = parts.some(p => {
-            const upper = p.toUpperCase()
-            return DISTRIBUTION_SUFFIXES.has(upper) || DISTRIBUTION_MAP[upper]
-        })
+        const hasDistributionPart = parts.some(p => isDistributionCode(p))
         
         if (validTitleParts.length === 0 && !hasDistributionPart) continue
 
@@ -432,10 +467,10 @@ export async function parseGradesPDF(file: File): Promise<{ courses: ParsedCours
                 const upper = p.toUpperCase()
                 if (DISTRIBUTION_SUFFIXES.has(upper)) {
                     const merged = bestRow.distribution + upper
-                    if (DISTRIBUTION_MAP[merged]) {
+                    if (isDistributionCode(merged)) {
                         bestRow.distribution = merged
                     }
-                } else if (DISTRIBUTION_MAP[upper]) {
+                } else if (isDistributionCode(upper)) {
                     bestRow.distribution = upper
                 }
             }
@@ -479,10 +514,15 @@ export async function parseGradesPDF(file: File): Promise<{ courses: ParsedCours
     // Build semester mapping from exam months (with Jun/Jul bucketing)
     const semesterMap = buildSemesterMap([...examMonthsSet])
 
+    // Grade point values for deduplication comparison
+    const GRADE_POINTS_PARSER: Record<string, number> = {
+        'S': 10, 'A': 9, 'B': 8, 'C': 7, 'D': 6, 'E': 5, 'F': 0, 'P': -1
+    }
+
     // Final pass: build course objects
     for (const row of trackedRows) {
         const semester = semesterMap.get(row.examMonth) || 'Imported'
-        const categoryName = DISTRIBUTION_MAP[row.distribution] || 'none'
+        const categoryName = getCategoryName(row.distribution)
 
         courses.push({
             name: row.title,
@@ -496,9 +536,58 @@ export async function parseGradesPDF(file: File): Promise<{ courses: ParsedCours
         })
     }
 
-    console.log(`Parsed ${courses.length} courses from PDF across ${semesterMap.size} semesters`)
+    // Deduplicate by course code: supply/improvement exams add NEW rows instead of
+    // replacing the old one. Keep the entry with the BEST grade; if grades are equal,
+    // prefer the newer exam month (later date = more recent attempt).
+    const bestByCourseCode = new Map<string, ParsedCourse>()
+    for (const course of courses) {
+        const existing = bestByCourseCode.get(course.code)
+        if (!existing) {
+            bestByCourseCode.set(course.code, course)
+            continue
+        }
 
-    return { courses }
+        const newPoints = GRADE_POINTS_PARSER[course.grade] ?? -1
+        const existingPoints = GRADE_POINTS_PARSER[existing.grade] ?? -1
+
+        let preferNew = false
+        if (newPoints > existingPoints) {
+            // New grade is strictly better
+            preferNew = true
+        } else if (newPoints === existingPoints) {
+            // Same grade — prefer the newer exam month (chronological comparison)
+            const newDate = parseExamMonth(course.examMonth)
+            const existingDate = parseExamMonth(existing.examMonth)
+            if (newDate && existingDate) {
+                if (newDate.year > existingDate.year ||
+                    (newDate.year === existingDate.year && newDate.month > existingDate.month)) {
+                    preferNew = true
+                }
+            }
+        }
+
+        if (preferNew) {
+            console.log(`Grade improvement detected for ${course.code}: ${existing.grade} (${existing.examMonth}) → ${course.grade} (${course.examMonth})`)
+            // Keep the original row's semester/examMonth so the course stays in its
+            // original semester — only upgrade the grade.
+            bestByCourseCode.set(course.code, {
+                ...existing,
+                grade: course.grade,
+            })
+        } else {
+            console.log(`Kept original grade for ${course.code}: ${existing.grade} (${existing.examMonth}), ignoring ${course.grade} (${course.examMonth})`)
+        }
+    }
+
+    const dedupedCourses = [...bestByCourseCode.values()]
+    const duplicatesResolved = courses.length - dedupedCourses.length
+
+    console.log(`Parsed ${courses.length} rows from PDF across ${semesterMap.size} semesters`)
+    if (duplicatesResolved > 0) {
+        console.log(`Resolved ${duplicatesResolved} duplicate course entries (supply/improvement exams) — kept best grade per course`)
+    }
+
+    return { courses: dedupedCourses }
 }
 /**
  * Parse VIT Timetable PDF and extract class schedule.

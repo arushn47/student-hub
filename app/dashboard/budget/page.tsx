@@ -86,7 +86,8 @@ export default function BudgetPage() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const { data: { user } } = await supabase.auth.getUser()
+                const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
                 if (!user) return
 
                 // 1. Fetch Expenses
@@ -137,7 +138,8 @@ export default function BudgetPage() {
 
         try {
             setIsSavingBudget(true)
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
             if (!user) return
 
             const { error } = await supabase
@@ -173,7 +175,8 @@ export default function BudgetPage() {
 
         try {
             setIsSavingBudget(true)
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
             if (!user) return
 
             const newBalance = monthlyBudget + amount
@@ -203,7 +206,8 @@ export default function BudgetPage() {
 
         try {
             setIsSubmitting(true)
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
             if (!user) {
                 toast.error('You must be logged in')
                 return

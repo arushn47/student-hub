@@ -201,7 +201,7 @@ export async function POST(request: Request) {
             ? `\n\nSUBJECT-WIDE IMPORTANT MIDTERM/ENDTERM QUESTIONS & SYLLABUS CONTEXT:\n${subjectImportantQuestions}\n`
             : ''
 
-        const systemPrompt = `You are an expert exam-prep assistant.
+        const systemPrompt = `You are an expert exam-prep assistant for university students.
 
             Generate content for:
             - Subject: ${subjectName}
@@ -213,40 +213,48 @@ export async function POST(request: Request) {
             Return ONLY valid JSON with this exact schema:
             {
                 "questions": [
-                    {"question": "string", "answer": "string", "is_most_likely": boolean, "visual_search_query": "string (optional)"}
+                    {"question": "string", "answer": "string", "is_most_likely": boolean, "visual_search_query": "string or null"}
                 ],
                 "flashcards": [
                     {"front": "string", "back": "string"}
                 ],
-                "summary": "string"
+                "short_notes": "string"
             }
 
-            Rules:
-            - Create as many questions as needed to cover the module, but cap at ${maxQuestions} total.
-            - Mark EXACTLY ${mostLikelyCount} questions as is_most_likely=true.
-            - All other questions must have is_most_likely=false.
+            RULES — follow every rule exactly:
+
+            QUESTIONS:
+            - Create questions to cover the module, cap at ${maxQuestions} total.
+            - Mark EXACTLY ${mostLikelyCount} questions as is_most_likely=true; all others must be false.
             - Each question should be worth ~${marksPerQuestion} marks.
-            - Create AT LEAST 10 flashcards (aim for ${flashcardsPerModule}). Focus on definitions and key terms.
-            - Make flashcards specific to THIS module only.
-            - For the "summary" field, generate a **"Ultra-Concise Quick Recap"**:
-                - **MAXIMUM 150 WORDS.**
-                - Use purely **bullet points** and **tables**.
-                - Focus ONLY on high-yield comparisons, formulas, or "tricks" to remember concepts.
-                - NO long paragraphs.
-            - Keep answers clear, structured, and exam-ready.${subjectImportantQuestions ? '\n- PRIORITIZE the important topics/questions provided above when creating questions and flashcards.' : ''}
-            ${topicOnly ? '\n- TOPIC-ONLY MODE: Use ONLY content relevant to this module topic. If the syllabus includes other modules/units, IGNORE them completely.' : ''}
-            - If provided with PDF images, pay special attention to any **HIGHLIGHTED TEXT** (yellow/colored backgrounds) or red-circled items, as these are strict syllabus priority areas.
-            - If a question would benefit from a visual diagram (e.g. "Draw the architecture of X", "Explain the cycle of Y"), provide a specific Google Image search query in 'visual_search_query' (e.g. "labeled diagram of von neumann architecture"). Otherwise leave it null.
-            - **CODE FORMATTING RULE (CRITICAL):** When including code examples in answers, you MUST use proper markdown fenced code blocks with the language identifier. For example:
+            - Answers must be detailed, exam-ready, structured with headers/bullets where appropriate.
+            - If the question involves code, ALWAYS wrap code in triple-backtick fenced blocks with the language tag:
               \`\`\`cpp
-              #include <iostream>
-              int main() {
-                  std::cout << "Hello";
-                  return 0;
-              }
+              // properly indented code here
               \`\`\`
-              NEVER write code inline as a single paragraph of text. Always use triple-backtick fenced code blocks with proper indentation and line breaks. This applies to ALL programming languages (cpp, java, python, c, sql, etc.).
-            - Return pure JSON.`
+              NEVER write code as inline prose. Always use proper indentation and line breaks inside the block.
+            - If a question would benefit from a diagram, set visual_search_query to a specific Google Images search (e.g. "labeled UML class diagram"). Otherwise set to null.
+
+            FLASHCARDS (VERY IMPORTANT — read carefully):
+            - Flashcards are quick revision aids, NOT question-answer pairs from the exam.
+            - Front: A concise term, concept name, or keyword (e.g. "Polymorphism", "Stack overflow", "Deadlock condition").
+            - Back: A SHORT definition or key fact in 1-3 sentences MAX. Think dictionary-style, not essay-style.
+            - Do NOT copy exam questions onto flashcards. Front must be a term/keyword, not a full sentence question.
+            - Create AT LEAST 10 flashcards, aim for ${flashcardsPerModule}. Cover every key term in the module.
+            - Example good flashcard: {"front": "Encapsulation", "back": "Binding data and methods into a single class unit, hiding internal state from outside access."}
+            - Example BAD flashcard: {"front": "Explain the four pillars of OOP", "back": "The four pillars are..."} — this is an exam question, not a flashcard.
+
+            SHORT NOTES (Cheat Sheet):
+            - Field name in JSON is \"short_notes\" (not \"summary\").
+            - Generate a dense, exam-day cheat sheet for this module.
+            - Use bullet points, short tables, and bold key terms. NO long paragraphs.
+            - Max 200 words. Structure it so a student can scan it in 2 minutes.
+            - Example format: headers for each sub-topic, then 2-4 bullet points of key facts/formulas.
+
+            ${subjectImportantQuestions ? '- PRIORITIZE the important topics/questions provided above when creating questions and flashcards.' : ''}
+            ${topicOnly ? '\n- TOPIC-ONLY MODE: Use ONLY content relevant to this module topic. If the syllabus includes other modules/units, IGNORE them.' : ''}
+            - If provided with PDF images, pay special attention to HIGHLIGHTED TEXT (yellow/colored) or red-circled items — these are priority areas.
+            - Return pure JSON only. No markdown wrapper around the JSON.`
 
         parts.push(systemPrompt)
 
@@ -549,7 +557,7 @@ async function generateWithCountEnforcement(
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         const attemptParts = attempt === 1
             ? baseParts
-            : [...baseParts, `\n\nIMPORTANT: Your previous output did not follow the rules. Regenerate JSON with up to ${opts.maxQuestions} total questions, EXACTLY ${opts.expectedMostLikely} marked is_most_likely=true, and EXACTLY ${opts.expectedFlashcards} flashcards. Summary must be point-wise with each line starting "- ". Output ONLY JSON.`]
+            : [...baseParts, `\n\nIMPORTANT: Your previous output did not follow the rules. Regenerate JSON with up to ${opts.maxQuestions} total questions, EXACTLY ${opts.expectedMostLikely} marked is_most_likely=true, and AT LEAST 10 flashcards (front = term/keyword, back = short definition). Use "short_notes" (not "summary") for the cheat sheet field. Output ONLY JSON.`]
 
         const generated = await generateJSON<GeneratedContent>(attemptParts)
         const normalized = normalizeGeneratedContent(generated, opts)
@@ -661,15 +669,19 @@ function normalizeGeneratedContent(
         })
         .filter(f => f.front.length > 0 && f.back.length > 0)
 
-    const fallbackFromQuestions = cleanQuestions
-        .slice(0, Math.max(0, Math.min(10, opts.expectedFlashcards)))
-        .map(q => ({ front: q.question, back: q.answer }))
+    const fallbackFromFlashcards = cleanFlashcardsRaw
+        .slice(0, 10)
+        .map(f => ({ front: f.front, back: f.back }))
         .filter(f => f.front.length > 0 && f.back.length > 0)
 
-    const cleanFlashcards = (cleanFlashcardsRaw.length > 0 ? cleanFlashcardsRaw : fallbackFromQuestions)
+    const cleanFlashcards = (cleanFlashcardsRaw.length > 0 ? cleanFlashcardsRaw : fallbackFromFlashcards)
         .slice(0, Math.max(0, opts.expectedFlashcards))
 
-    let cleanSummary = ensurePointWiseSummary(summary)
+    const contentAny = content as unknown as Record<string, unknown>
+    const rawShortNotes = typeof content.summary === 'string' ? content.summary
+        : typeof contentAny.short_notes === 'string' ? contentAny.short_notes as string
+        : ''
+    let cleanSummary = ensurePointWiseSummary(rawShortNotes)
     if (!cleanSummary) {
         cleanSummary = buildFallbackNotes(cleanQuestions, cleanFlashcards)
     }

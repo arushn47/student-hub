@@ -99,7 +99,7 @@ const gradeColors: Record<string, string> = {
 }
 
 export default function GradesPage() {
-        const [courses, setCourses] = useState<Course[]>([])
+    const [courses, setCourses] = useState<Course[]>([])
     const [loading, setLoading] = useState(true)
     const [newCourse, setNewCourse] = useState({ name: '', credits: 3, grade: 'S', semester: 'Semester 1', category: 'none' })
     const [showAddForm, setShowAddForm] = useState(false)
@@ -118,30 +118,49 @@ export default function GradesPage() {
     const BTECH_CURRICULUM: CurriculumCategory[] = [
         { id: '1', name: 'Programme Core', required: 55 },
         { id: '2', name: 'Programme Elective', required: 15 },
-        { id: '3', name: 'University Core - Natural Science', required: 23 },
-        { id: '4', name: 'University Core - Engineering Sciences', required: 12 },
-        { id: '5', name: 'University Core - Skill Development', required: 14 },
-        { id: '6', name: 'University Core - Humanities & Social Science', required: 6 },
-        { id: '7', name: 'University Core - Project & Internships', required: 17 },
-        { id: '8', name: 'University Elective - Natural Science', required: 6 },
-        { id: '9', name: 'University Elective - Multidisciplinary', required: 3 },
-        { id: '10', name: 'University Elective - Humanities & Social', required: 3 },
+        { id: '3', name: 'University Core - Natural Science Core', required: 23 },
+        { id: '4', name: 'University Core - Basic Engineering Sciences Core', required: 12 },
+        { id: '5', name: 'University Core - Skill Development Courses', required: 14 },
+        { id: '6', name: 'University Core - Humanities Social Science and Management Core', required: 6 },
+        { id: '7', name: 'University Core - Project and Internships', required: 17 },
+        { id: '8', name: 'University Elective - Natural Science Electives', required: 6 },
+        { id: '9', name: 'University Elective - Multidisciplinary Electives', required: 3 },
+        { id: '10', name: 'University Elective - Humanities, Social Sciences and Management Electives', required: 3 },
         { id: '11', name: 'University Elective - Open Electives', required: 6 },
-        { id: '12', name: 'Non-Graded Mandatory Courses', required: 9 },
+        { id: '12', name: 'Non - Graded Mandatory Courses', required: 9 },
     ]
 
     const MTECH_CURRICULUM: CurriculumCategory[] = [
         { id: '1', name: 'Programme Core', required: 87 },
         { id: '2', name: 'Programme Elective', required: 24 },
-        { id: '3', name: 'University Core - Natural Science', required: 26 },
-        { id: '4', name: 'University Core - Skill Development', required: 7 },
-        { id: '5', name: 'University Core - Humanities & Social Science', required: 6 },
-        { id: '6', name: 'University Core - Project & Internships', required: 46 },
-        { id: '7', name: 'University Elective - Natural Science', required: 6 },
-        { id: '8', name: 'University Elective - Humanities & Social', required: 9 },
+        { id: '3', name: 'University Core - Natural Science Core', required: 26 },
+        { id: '4', name: 'University Core - Skill Development Courses', required: 7 },
+        { id: '5', name: 'University Core - Humanities Social Science and Management Core', required: 6 },
+        { id: '6', name: 'University Core - Project and Internships', required: 46 },
+        { id: '7', name: 'University Elective - Natural Science Electives', required: 6 },
+        { id: '8', name: 'University Elective - Humanities, Social Sciences and Management Electives', required: 9 },
         { id: '9', name: 'University Elective - Open Electives', required: 9 },
-        { id: '10', name: 'Non-Graded Mandatory Courses', required: 9 },
+        { id: '10', name: 'Non - Graded Mandatory Courses', required: 9 },
     ]
+
+    const shortenCategory = (name: string) => {
+        const acronyms: Record<string, string> = {
+            // Current exact names (from curriculum)
+            'Programme Core': 'PC',
+            'Programme Elective': 'PE',
+            'University Core - Natural Science Core': 'UCNSC',
+            'University Core - Basic Engineering Sciences Core': 'UCBESC',
+            'University Core - Skill Development Courses': 'UCSDC',
+            'University Core - Humanities Social Science and Management Core': 'UCHSSMC',
+            'University Core - Project and Internships': 'UCPI',
+            'University Elective - Natural Science Electives': 'UENSE',
+            'University Elective - Multidisciplinary Electives': 'UEME',
+            'University Elective - Humanities, Social Sciences and Management Electives': 'UEHSSME',
+            'University Elective - Open Electives': 'UEOE',
+            'Non - Graded Mandatory Courses': 'NMC',
+        }
+        return acronyms[name] || name
+    }
 
     const [curriculum, setCurriculum] = useState<CurriculumCategory[]>([])
     const [showCurriculum, setShowCurriculum] = useState(false)
@@ -162,7 +181,8 @@ export default function GradesPage() {
     useEffect(() => {
         const fetchCurriculum = async () => {
             try {
-                const { data: { user } } = await supabase.auth.getUser()
+                const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
                 if (!user) return
 
                 const { data, error } = await supabase
@@ -171,28 +191,28 @@ export default function GradesPage() {
                     .eq('user_id', user.id)
                     .order('created_at', { ascending: true })
 
+                const { data: profile } = await supabase.from('profiles').select('preferences').eq('id', user.id).single()
+                const isMtech = profile?.preferences?.degree_type === 'mtech'
+                setActiveTemplate(isMtech ? 'mtech' : 'btech')
+                const referenceOrder = isMtech ? MTECH_CURRICULUM : BTECH_CURRICULUM
+                const orderMap = new Map(referenceOrder.map((cat, idx) => [cat.name, idx]))
+
                 if (!error && data && data.length > 0) {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    setCurriculum(data.map((item: any) => ({
+                    const parsedData = data.map((item: any) => ({
                         id: item.id,
                         name: item.name,
                         required: item.required_credits
-                    })))
+                    })).sort((a, b) => {
+                        const idxA = orderMap.has(a.name) ? orderMap.get(a.name)! : 999;
+                        const idxB = orderMap.has(b.name) ? orderMap.get(b.name)! : 999;
+                        return idxA - idxB;
+                    });
                     
-                    // Fetch user preferences to set the activeTemplate badge correctly
-                    const { data: profile } = await supabase.from('profiles').select('preferences').eq('id', user.id).single()
-                    if (profile?.preferences?.degree_type === 'mtech') {
-                        setActiveTemplate('mtech')
-                    }
+                    setCurriculum(parsedData)
                 } else if (data && data.length === 0) {
-                    // Fetch user preferences to determine the default curriculum
-                    const { data: profile } = await supabase.from('profiles').select('preferences').eq('id', user.id).single()
-                    const isMtech = profile?.preferences?.degree_type === 'mtech'
-                    setActiveTemplate(isMtech ? 'mtech' : 'btech')
-                    const defaultCurriculum = isMtech ? MTECH_CURRICULUM : BTECH_CURRICULUM
-
                     // Initialize with defaults if empty
-                    const initialData = defaultCurriculum.map(c => ({
+                    const initialData = referenceOrder.map(c => ({
                         user_id: user.id,
                         name: c.name,
                         required_credits: c.required
@@ -205,11 +225,17 @@ export default function GradesPage() {
 
                     if (!insertError && inserted) {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        setCurriculum(inserted.map((item: any) => ({
+                        const parsedData = inserted.map((item: any) => ({
                             id: item.id,
                             name: item.name,
                             required: item.required_credits
-                        })))
+                        })).sort((a, b) => {
+                            const idxA = orderMap.has(a.name) ? orderMap.get(a.name)! : 999;
+                            const idxB = orderMap.has(b.name) ? orderMap.get(b.name)! : 999;
+                            return idxA - idxB;
+                        });
+                        
+                        setCurriculum(parsedData)
                     }
                 }
             } catch (error) {
@@ -225,7 +251,8 @@ export default function GradesPage() {
             // Skip initial render or if empty
             if (curriculum.length === 0) return
 
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
             if (!user) return
 
             const updates = curriculum.map(c => ({
@@ -247,7 +274,8 @@ export default function GradesPage() {
     useEffect(() => {
         const fetchCourses = async () => {
             try {
-                const { data: { user } } = await supabase.auth.getUser()
+                const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
                 if (!user) return
 
                 const { data, error } = await supabase
@@ -258,9 +286,6 @@ export default function GradesPage() {
 
                 if (error) throw error
                 setCourses(data || [])
-
-                // Debug log to terminal
-                fetch('/api/debug-courses', { method: 'POST', body: JSON.stringify(data || []) }).catch(e => { })
 
                 // Auto-open the most recent semester
                 if (data && data.length > 0) {
@@ -483,7 +508,8 @@ export default function GradesPage() {
 
         try {
             setIsSubmitting(true)
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
             if (!user) {
                 toast.error('You must be logged in')
                 return
@@ -545,6 +571,23 @@ export default function GradesPage() {
         }
     }
 
+    // Map any old/variant category name back to the canonical full name used in curriculum
+    const normalizeCategory = (cat: string): string => {
+        if (!cat || cat === 'none') return 'none'
+        const map: Record<string, string> = {
+            'University Core - Natural Science': 'University Core - Natural Science Core',
+            'University Core - Engineering Sciences': 'University Core - Basic Engineering Sciences Core',
+            'University Core - Skill Development': 'University Core - Skill Development Courses',
+            'University Core - Humanities & Social Science': 'University Core - Humanities Social Science and Management Core',
+            'University Core - Project & Internships': 'University Core - Project and Internships',
+            'University Elective - Natural Science': 'University Elective - Natural Science Electives',
+            'University Elective - Multidisciplinary': 'University Elective - Multidisciplinary Electives',
+            'University Elective - Humanities & Social': 'University Elective - Humanities, Social Sciences and Management Electives',
+            'Non-Graded Mandatory Courses': 'Non - Graded Mandatory Courses',
+        }
+        return map[cat] || cat
+    }
+
     const openEditDialog = (course: Course) => {
         setEditingCourse(course)
         setEditForm({
@@ -552,7 +595,7 @@ export default function GradesPage() {
             credits: course.credits,
             grade: course.grade,
             semester: course.semester,
-            category: course.category || 'none'
+            category: normalizeCategory(course.category || 'none')
         })
     }
 
@@ -561,7 +604,8 @@ export default function GradesPage() {
 
         try {
             setIsSubmitting(true)
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
             if (!user) {
                 toast.error('You must be logged in')
                 return
@@ -636,7 +680,8 @@ export default function GradesPage() {
     // Clear all courses
     const clearAllCourses = async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
             if (!user) return
 
             const { error } = await supabase
@@ -771,11 +816,14 @@ export default function GradesPage() {
                         onExtract={async (data) => {
                             if (data.courses && Array.isArray(data.courses)) {
                                 try {
-                                    const { data: { user } } = await supabase.auth.getUser()
+                                    const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
                                     if (!user) return
 
-                                    // Get existing course names for duplicate detection
-                                    const existingNames = new Set(courses.map(c => c.name.toLowerCase().trim()))
+                                    // Build a map of existing courses by name for O(1) lookup
+                                    const existingByName = new Map(
+                                        courses.map(c => [c.name.toLowerCase().trim(), c])
+                                    )
 
                                     // Pre-process courses with default semester if missing
                                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -801,32 +849,74 @@ export default function GradesPage() {
                                         }
                                     })
 
-                                    // Filter out duplicates (silently skip)
-                                    const coursesToInsert = allCourses.filter(
-                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                        (c: any) => !existingNames.has(c.name.toLowerCase().trim())
-                                    )
-                                    const duplicatesSkipped = allCourses.length - coursesToInsert.length
+                                    // Separate courses into: new inserts vs. grade upgrades vs. unchanged duplicates
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    const coursesToInsert: any[] = []
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    const coursesToUpdate: { id: string; grade: string }[] = []
 
-                                    if (coursesToInsert.length === 0) {
-                                        toast.info('All courses already exist, nothing to import')
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    for (const incoming of allCourses as any[]) {
+                                        const existing = existingByName.get(incoming.name.toLowerCase().trim())
+                                        if (!existing) {
+                                            // Brand new course — insert
+                                            coursesToInsert.push(incoming)
+                                        } else {
+                                            // Course already exists — check if the new grade is better
+                                            // (supply exam / grade improvement scenario)
+                                            const incomingPoints = gradePoints[incoming.grade] ?? -1
+                                            const existingPoints = gradePoints[existing.grade] ?? -1
+                                            if (incomingPoints > existingPoints) {
+                                                coursesToUpdate.push({
+                                                    id: existing.id,
+                                                    grade: incoming.grade,
+                                                })
+                                            }
+                                            // Otherwise silently skip — existing grade is same or better
+                                        }
+                                    }
+
+                                    if (coursesToInsert.length === 0 && coursesToUpdate.length === 0) {
+                                        toast.info('All courses already exist with equal or better grades — nothing to import')
                                         return
                                     }
 
-                                    const { data: inserted, error } = await supabase
-                                        .from('courses')
-                                        .insert(coursesToInsert)
-                                        .select()
-
-                                    if (error) throw error
-
-                                    if (inserted) {
-                                        setCourses(prev => [...inserted, ...prev])
-                                        const msg = duplicatesSkipped > 0
-                                            ? `Imported ${inserted.length} courses (${duplicatesSkipped} duplicates skipped)`
-                                            : `Imported ${inserted.length} courses`
-                                        toast.success(msg)
+                                    // Insert new courses
+                                    let inserted: Course[] = []
+                                    if (coursesToInsert.length > 0) {
+                                        const { data: insertedData, error: insertError } = await supabase
+                                            .from('courses')
+                                            .insert(coursesToInsert)
+                                            .select()
+                                        if (insertError) throw insertError
+                                        inserted = insertedData || []
                                     }
+
+                                    // Update courses where grade improved
+                                    const updatedIds: string[] = []
+                                    for (const upd of coursesToUpdate) {
+                                        const { error: updateError } = await supabase
+                                            .from('courses')
+                                            .update({ grade: upd.grade })
+                                            .eq('id', upd.id)
+                                            .eq('user_id', user.id)
+                                        if (!updateError) updatedIds.push(upd.id)
+                                    }
+
+                                    // Apply all changes to local state
+                                    setCourses(prev => {
+                                        // Merge grade updates into existing state
+                                        const withUpdates = prev.map(c => {
+                                            const upd = coursesToUpdate.find(u => u.id === c.id)
+                                            return upd ? { ...c, grade: upd.grade } : c
+                                        })
+                                        return [...inserted, ...withUpdates]
+                                    })
+
+                                    const parts: string[] = []
+                                    if (inserted.length > 0) parts.push(`${inserted.length} new course${inserted.length > 1 ? 's' : ''} imported`)
+                                    if (updatedIds.length > 0) parts.push(`${updatedIds.length} grade${updatedIds.length > 1 ? 's' : ''} improved`)
+                                    toast.success(parts.join(', '))
                                 } catch (e: unknown) {
                                     const err = e instanceof Error ? e.message : String(e);
                                     toast.error(`Import failed: ${err}`)
@@ -1090,26 +1180,39 @@ export default function GradesPage() {
                                     const matchCategory = (cCat: string, target: string) => {
                                         if (!cCat) return false;
 
-                                        const OLD_MAPPINGS: Record<string, string> = {
-                                            'university core - natural science core': 'university core - natural science',
-                                            'university core - basic engineering sciences core': 'university core - engineering sciences',
-                                            'university core - engineering sciences core': 'university core - engineering sciences',
-                                            'university core - basic engineering sciences': 'university core - engineering sciences',
-                                            'university core - skill development courses': 'university core - skill development',
-                                            'university core - humanities social science and management core': 'university core - humanities & social science',
-                                            'university elective - natural science electives': 'university elective - natural science',
-                                            'university elective - multidisciplinary electives': 'university elective - multidisciplinary',
-                                            'university elective - open electives': 'university elective - open electives',
+                                        // Normalize any old or new variant to a canonical lowercased key
+                                        const canonicalize = (s: string): string => {
+                                            const OLD_TO_CANONICAL: Record<string, string> = {
+                                                // Old short names → canonical
+                                                'university core - natural science': 'ucnsc',
+                                                'university core - engineering sciences': 'ucbesc',
+                                                'university core - skill development': 'ucsdc',
+                                                'university core - humanities & social science': 'uchssmc',
+                                                'university core - project & internships': 'ucpi',
+                                                'university elective - natural science': 'uense',
+                                                'university elective - multidisciplinary': 'ueme',
+                                                'university elective - humanities & social': 'uehssme',
+                                                'non-graded mandatory courses': 'nmc',
+                                                // New full names → canonical
+                                                'university core - natural science core': 'ucnsc',
+                                                'university core - basic engineering sciences core': 'ucbesc',
+                                                'university core - skill development courses': 'ucsdc',
+                                                'university core - humanities social science and management core': 'uchssmc',
+                                                'university core - project and internships': 'ucpi',
+                                                'university elective - natural science electives': 'uense',
+                                                'university elective - multidisciplinary electives': 'ueme',
+                                                'university elective - humanities, social sciences and management electives': 'uehssme',
+                                                'university elective - open electives': 'ueoe',
+                                                'non - graded mandatory courses': 'nmc',
+                                                // Short codes
+                                                'programme core': 'pc',
+                                                'programme elective': 'pe',
+                                            };
+                                            const key = s.toLowerCase().trim();
+                                            return OLD_TO_CANONICAL[key] || key;
                                         };
 
-                                        let s = cCat.toLowerCase().trim();
-                                        s = OLD_MAPPINGS[s] || s;
-                                        s = s.replace(/and/g, '&').replace(/\s+/g, ' ').trim();
-
-                                        let t = target.toLowerCase().trim();
-                                        t = t.replace(/and/g, '&').replace(/\s+/g, ' ').trim();
-
-                                        return s === t;
+                                        return canonicalize(cCat) === canonicalize(target);
                                     };
 
                                     // Calculate earned credits from courses with this category (excluding F grades)
@@ -1750,7 +1853,7 @@ export default function GradesPage() {
                                         <SelectItem value="none">None</SelectItem>
                                         {curriculum.map((cat) => (
                                             <SelectItem key={cat.id} value={cat.name}>
-                                                {cat.name}
+                                                {shortenCategory(cat.name)}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -1861,7 +1964,7 @@ export default function GradesPage() {
                                         <SelectItem value="none">None</SelectItem>
                                         {curriculum.map((cat) => (
                                             <SelectItem key={cat.id} value={cat.name}>
-                                                {cat.name}
+                                                {shortenCategory(cat.name)}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>

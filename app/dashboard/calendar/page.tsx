@@ -4,7 +4,8 @@ import type { Task, ClassSchedule, SemesterBreak, Semester } from '@/types'
 
 export default async function CalendarPage() {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
 
     // Handle guest mode
     if (!user) {
@@ -49,6 +50,8 @@ export default async function CalendarPage() {
             tasks={(tasksResult.data || []) as Task[]}
             classes={(classesResult.data || []) as ClassSchedule[]}
             breaks={breaks}
+            semesterStart={activeSemester?.start_date || null}
+            semesterEnd={activeSemester?.end_date || null}
         />
     )
 }

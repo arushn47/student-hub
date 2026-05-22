@@ -197,6 +197,27 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []) // Run only on mount
 
+    // Auto-fix classes without semester_id
+    useEffect(() => {
+        const fixClasses = async () => {
+            if (!selectedSemester || selectedSemester === 'all') return
+            const classesWithoutSemester = classes.filter(c => !c.semester_id)
+            if (classesWithoutSemester.length > 0) {
+                // Update in database silently
+                for (const cls of classesWithoutSemester) {
+                    await supabase
+                        .from('class_schedules')
+                        .update({ semester_id: selectedSemester })
+                        .eq('id', cls.id)
+                }
+                // Update local state
+                setClasses(prev => prev.map(c => !c.semester_id ? { ...c, semester_id: selectedSemester } : c))
+                toast.success(`Fixed ${classesWithoutSemester.length} timetable items linking to current semester`)
+            }
+        }
+        fixClasses()
+    }, [classes, selectedSemester, supabase])
+
     const createClass = async () => {
         if (!newClass.name.trim()) {
             toast.error('Class name is required')
