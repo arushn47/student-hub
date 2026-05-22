@@ -75,6 +75,17 @@ interface AttendanceRecord {
     semester_id: string | null
 }
 
+interface BaseAttendanceItem {
+    present: number
+    total: number
+}
+
+interface AttendancePreferences {
+    base_attendance?: Record<string, BaseAttendanceItem>
+    base_attendance_date?: string | null
+    timetable_overrides?: Record<string, number>
+}
+
 export default function AttendancePage() {
     const [classes, setClasses] = useState<ClassSchedule[]>([])
     const [records, setRecords] = useState<AttendanceRecord[]>([])
@@ -87,9 +98,9 @@ export default function AttendancePage() {
     const [targetPercentage, setTargetPercentage] = useState<number>(75)
     const [weekOffset, setWeekOffset] = useState(0)
     const [simulatedSemesterAbsents, setSimulatedSemesterAbsents] = useState<number | null>(null)
-    const [preferences, setPreferences] = useState<any>(null)
+    const [preferences, setPreferences] = useState<AttendancePreferences | null>(null)
 
-    const savePreferences = async (updatedPrefs: any) => {
+    const savePreferences = async (updatedPrefs: AttendancePreferences) => {
         try {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
@@ -337,14 +348,14 @@ export default function AttendancePage() {
         let total = activeRecords.filter(r => r.status !== 'cancelled').length
         let present = activeRecords.filter(r => r.status === 'present').length
         let absent = activeRecords.filter(r => r.status === 'absent').length
-        let cancelled = activeRecords.filter(r => r.status === 'cancelled').length
+        const cancelled = activeRecords.filter(r => r.status === 'cancelled').length
 
         if (preferences?.base_attendance) {
             if (classId && classId !== 'all') {
                 const cls = filteredClasses.find(c => c.id === classId)
                 if (cls) {
                     const code = getCourseCode(cls.name)
-                    const base = preferences.base_attendance[code]
+                    const base = preferences.base_attendance?.[code]
                     if (base) {
                         present += base.present
                         total += base.total
@@ -354,7 +365,7 @@ export default function AttendancePage() {
             } else {
                 const semCourses = Array.from(new Map(filteredClasses.map(c => [getCourseCode(c.name), c])).keys())
                 semCourses.forEach(code => {
-                    const base = preferences.base_attendance[code]
+                    const base = preferences.base_attendance?.[code]
                     if (base) {
                         present += base.present
                         total += base.total
@@ -392,9 +403,9 @@ export default function AttendancePage() {
         let total = activeRecords.filter(r => r.status !== 'cancelled').length
         let present = activeRecords.filter(r => r.status === 'present').length
         let absent = activeRecords.filter(r => r.status === 'absent').length
-        let cancelled = activeRecords.filter(r => r.status === 'cancelled').length
+        const cancelled = activeRecords.filter(r => r.status === 'cancelled').length
 
-        if (preferences?.base_attendance?.[code]) {
+        if (base) {
             present += base.present
             total += base.total
             absent += (base.total - base.present)
@@ -482,20 +493,21 @@ export default function AttendancePage() {
             (r.class_schedule_id && semClassIds.includes(r.class_schedule_id))
         )
 
+        const baseAttendanceDate = preferences?.base_attendance_date
         // Filter out past records on or before base_attendance_date to avoid double-counting
-        const activeRecords = preferences?.base_attendance_date
-            ? semRecords.filter(r => r.date > preferences.base_attendance_date)
+        const activeRecords = baseAttendanceDate
+            ? semRecords.filter(r => r.date > baseAttendanceDate)
             : semRecords
 
         let total = activeRecords.filter(r => r.status !== 'cancelled').length
         let present = activeRecords.filter(r => r.status === 'present').length
         let absent = activeRecords.filter(r => r.status === 'absent').length
-        let cancelled = activeRecords.filter(r => r.status === 'cancelled').length
+        const cancelled = activeRecords.filter(r => r.status === 'cancelled').length
 
         const uniqueCodes = Array.from(new Map(semClasses.map(c => [getCourseCode(c.name), c])).keys())
         if (preferences?.base_attendance) {
             uniqueCodes.forEach(code => {
-                const base = preferences.base_attendance[code]
+                const base = preferences.base_attendance?.[code]
                 if (base) {
                     present += base.present
                     total += base.total
@@ -516,7 +528,7 @@ export default function AttendancePage() {
             let sTotal = subjRecords.filter(r => r.status !== 'cancelled').length
             let sPresent = subjRecords.filter(r => r.status === 'present').length
             let sAbsent = subjRecords.filter(r => r.status === 'absent').length
-            let sCancelled = subjRecords.filter(r => r.status === 'cancelled').length
+            const sCancelled = subjRecords.filter(r => r.status === 'cancelled').length
 
             const code = getCourseCode(cls.name)
             if (preferences?.base_attendance?.[code]) {
@@ -543,21 +555,22 @@ export default function AttendancePage() {
     }
 
     const globalCumulativeStats = useMemo(() => {
+        const baseAttendanceDate = preferences?.base_attendance_date
         // Filter out past records on or before base_attendance_date to avoid double-counting
-        const activeRecords = preferences?.base_attendance_date
-            ? records.filter(r => r.date > preferences.base_attendance_date)
+        const activeRecords = baseAttendanceDate
+            ? records.filter(r => r.date > baseAttendanceDate)
             : records
 
         let total = activeRecords.filter(r => r.status !== 'cancelled').length
         let present = activeRecords.filter(r => r.status === 'present').length
         let absent = activeRecords.filter(r => r.status === 'absent').length
-        let cancelled = activeRecords.filter(r => r.status === 'cancelled').length
+        const cancelled = activeRecords.filter(r => r.status === 'cancelled').length
 
         // Only count base attendance for course codes that exist in class schedules
         const activeCourseCodes = new Set(classes.map(c => getCourseCode(c.name)))
 
         if (preferences?.base_attendance) {
-            Object.entries(preferences.base_attendance).forEach(([code, base]: [string, any]) => {
+            Object.entries(preferences.base_attendance).forEach(([code, base]: [string, BaseAttendanceItem]) => {
                 if (activeCourseCodes.has(code.toUpperCase())) {
                     present += base.present
                     total += base.total
@@ -599,7 +612,7 @@ export default function AttendancePage() {
         const semBreaks = breaks.filter(b => b.semester_id === currentSemesterObj.id)
 
         // Iterate through every day of the semester
-        let currentDay = new Date(semStart)
+        const currentDay = new Date(semStart)
         while (currentDay <= semEnd) {
             const dayNum = currentDay.getDay()
             
@@ -801,12 +814,12 @@ export default function AttendancePage() {
                                 onExtract={(data) => {
                                     if (data && data.courses) {
                                         const updatedBase = { ...(preferences?.base_attendance || {}) }
-                                        data.courses.forEach((item: any) => {
+                                        data.courses.forEach((item: { code?: string; attended?: string | number; total?: string | number }) => {
                                             const parsedCode = item.code?.toUpperCase().trim()
                                             if (parsedCode) {
                                                 updatedBase[parsedCode] = {
-                                                    present: parseInt(item.attended) || 0,
-                                                    total: parseInt(item.total) || 0
+                                                    present: parseInt(String(item.attended ?? 0)) || 0,
+                                                    total: parseInt(String(item.total ?? 0)) || 0
                                                 }
                                             }
                                         })
@@ -1791,12 +1804,12 @@ export default function AttendancePage() {
                                                             </SelectTrigger>
                                                             <SelectContent className="bg-gray-900 border-white/10">
                                                                 <SelectItem value="standard">🗓️ Standard</SelectItem>
-                                                                <SelectItem value="1">Monday's</SelectItem>
-                                                                <SelectItem value="2">Tuesday's</SelectItem>
-                                                                <SelectItem value="3">Wednesday's</SelectItem>
-                                                                <SelectItem value="4">Thursday's</SelectItem>
-                                                                <SelectItem value="5">Friday's</SelectItem>
-                                                                <SelectItem value="6">Saturday's</SelectItem>
+                                                                <SelectItem value="1">{"Monday's"}</SelectItem>
+                                                                <SelectItem value="2">{"Tuesday's"}</SelectItem>
+                                                                <SelectItem value="3">{"Wednesday's"}</SelectItem>
+                                                                <SelectItem value="4">{"Thursday's"}</SelectItem>
+                                                                <SelectItem value="5">{"Friday's"}</SelectItem>
+                                                                <SelectItem value="6">{"Saturday's"}</SelectItem>
                                                                 <SelectItem value="-1">No Classes</SelectItem>
                                                             </SelectContent>
                                                         </Select>
