@@ -134,34 +134,29 @@ CRITICAL: Do not omit any row. Extraction is considered failed if any table row 
                 break
             case 'timetable':
                 systemPrompt = hasOcrText
-                    ? `Analyze this OCR-extracted text from a university timetable. Extract all class entries.
-
-Each class entry should contain the day, time slot, course code/subject, and room/location.
-Parse carefully — OCR text may have formatting artifacts. Extract as many classes as possible.
-
+                    ? `Analyze this OCR-extracted text from a university timetable. Extract all occupied class entries.
+Each class entry should contain the day, time slot, course code/subject (exclude slot/room), slot code, and room/location.
 OCR TEXT:
 ${text}`
                     : `Analyze this university timetable grid image VERY CAREFULLY. This is a weekly schedule with:
 - ROWS = Days of the week (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday)
 - COLUMNS = Time slots (morning to evening, e.g., 08:30, 10:05, 11:40, 13:15, 14:50, 16:25, 18:00, etc.)
 
-YOU MUST SCAN EVERY SINGLE CELL IN THE GRID - from the first column to the LAST column, for EACH day.
+YOU MUST SCAN EVERY SINGLE CELL IN THE GRID. Look for HIGHLIGHTED or occupied classes.
 
-For each cell, a class entry typically looks like:
-- "CSE3009-LTP" or "B12-CSE3009-LTP-AB02-429" (Course Code + Type + Room)
-- The format is often: [SlotID]-[CourseCode]-[Type]-[Building][Room]-[RoomNumber]
+IGNORE empty cells.
+IGNORE cells that ONLY contain slot IDs (like "A11", "D11", "L1") without any course info.
+IGNORE cells that say "Lunch".
 
-IGNORE cells that:
-- Only contain slot IDs like "A11", "B12", "C13", "D14", "E13", "F13" without any course info
-- Say "Lunch" or are empty
+For the highlighted/occupied cells (e.g. "B11-MAT1001-LT-AB-301-FS"), extract exactly this:
+1. Subject / Course Code (e.g., MAT1001) - Do NOT include the slot code (B11) or room in the course code!
+2. Slot Code (e.g., B11, L1)
+3. Room/Location (e.g., AB-301)
+4. Time of that slot. Parse the time from the top header column for that specific cell (e.g. "10:05 - 11:35"). Read the actual time written in the column header.
+5. Day of the week from the row.
 
-EXTRACT cells that contain actual course codes (e.g., CSE3009, MAT3002, CDS3005, PLA1006).
-
-Parse the time from the header row (Start/End times shown at top).
-For example, if a cell is in the 08:30 column with End 10:00, use that time range.
-
-IMPORTANT: There may be 8+ columns of classes - extract from ALL of them, not just the first few!`
-                jsonSchema = 'Return JSON: { "classes": [{ "day": "string (Full day name: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday)", "time": "string (HH:MM - HH:MM in 24h format, e.g., 10:05 - 11:35)", "subject": "string (Course Code like CSE3009-LTP)", "location": "string (Room like AB02-429 or AR-202)" }] }'
+Extract EVERY single highlighted class in the grid.`
+                jsonSchema = 'Return JSON: { "classes": [{ "day": "string (Full day name: Monday, Tuesday, etc.)", "time": "string (HH:MM - HH:MM)", "subject": "string (Course Code only, e.g. MAT1001)", "slot": "string (e.g. B11)", "location": "string (Room e.g. AB-301)" }] }'
                 break
             case 'expenses':
                 systemPrompt = hasOcrText

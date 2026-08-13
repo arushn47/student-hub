@@ -38,6 +38,7 @@ import { format, startOfWeek, addDays, isSameDay, parseISO, isWithinInterval } f
 import type { Semester, SemesterBreak } from '@/types'
 import Link from 'next/link'
 import { ImageUploadExtractor } from '@/components/ai/ImageUploadExtractor'
+import { SemesterSetupWizard } from '@/components/settings/SemesterSetupWizard'
 
 const getCourseCode = (name: string): string => {
     const match = name.match(/([A-Z]{3,4}\d{4})/i)
@@ -99,6 +100,8 @@ export default function AttendancePage() {
     const [weekOffset, setWeekOffset] = useState(0)
     const [simulatedSemesterAbsents, setSimulatedSemesterAbsents] = useState<number | null>(null)
     const [preferences, setPreferences] = useState<AttendancePreferences | null>(null)
+    const [userId, setUserId] = useState<string | null>(null)
+    const [wizardOpen, setWizardOpen] = useState(false)
 
     const savePreferences = async (updatedPrefs: AttendancePreferences) => {
         try {
@@ -162,6 +165,7 @@ export default function AttendancePage() {
                 setLoadError('Not signed in')
                 return
             }
+            setUserId(user.id)
 
             // Fetch all data in parallel
             const [classRes, attendanceRes, semesterRes, breaksRes, profileRes] = await Promise.all([
@@ -700,6 +704,53 @@ export default function AttendancePage() {
         return (
             <div className="flex items-center justify-center h-[50vh]">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        )
+    }
+
+    if (semesters.length === 0) {
+        return (
+            <div className="space-y-8">
+                <div>
+                    <h1 className="text-3xl font-bold gradient-text">Attendance Tracker</h1>
+                    <p className="text-muted-foreground mt-1">Track and analyze your class attendance</p>
+                </div>
+
+                <div className="p-8 md:p-12 rounded-3xl bg-gradient-to-br from-purple-500/[0.03] via-background to-indigo-500/[0.03] border border-white/5 shadow-2xl text-center max-w-2xl mx-auto my-10 animate-in fade-in duration-300">
+                    <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mx-auto mb-6 border border-purple-500/20 text-purple-400">
+                        <GraduationCap className="h-8 w-8" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-3">Set Up Your Semesters</h3>
+                    <p className="text-gray-400 text-sm max-w-md mx-auto mb-8 leading-relaxed">
+                        To compute active attendance statistics, schedule logs, and target benchmarks, you need to configure your academic semesters first. Use our quick 1-click setup wizard to calibrate your academic timeline!
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+                        <Button
+                            onClick={() => setWizardOpen(true)}
+                            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl px-6 py-5 font-semibold flex items-center gap-1.5 shadow-lg shadow-purple-900/30 w-full sm:w-auto cursor-pointer"
+                        >
+                            <Sparkles className="h-4 w-4 animate-pulse" />
+                            Launch Setup Wizard
+                        </Button>
+                        <Link href="/dashboard/settings/semesters" className="w-full sm:w-auto">
+                            <Button
+                                variant="outline"
+                                className="border-white/10 text-gray-300 hover:bg-white/5 rounded-xl px-6 py-5 w-full cursor-pointer"
+                            >
+                                Manual Settings
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+
+                <SemesterSetupWizard
+                    isOpen={wizardOpen}
+                    onOpenChange={setWizardOpen}
+                    onComplete={() => {
+                        fetchData()
+                    }}
+                    userId={userId || ''}
+                />
             </div>
         )
     }

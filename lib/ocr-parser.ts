@@ -2,6 +2,50 @@
 import { createWorker } from 'tesseract.js'
 
 /**
+ * OCR normalizer helper functions to resolve common character recognition issues
+ * caused by low-contrast background fills, red highlights, or styling colors.
+ */
+function normalizeSlotCode(code: string): string {
+    let normalized = code.toUpperCase().replace(/\s+/g, '');
+    
+    // Normalize digit confusion common in OCR (L/I/O -> 1/1/0)
+    if (/^[A-Z][IL1O][IL1O]$/.test(normalized)) {
+        normalized = normalized.charAt(0) + '11';
+    } else if (/^[A-Z][IL1O]$/.test(normalized)) {
+        normalized = normalized.charAt(0) + '1';
+    } else if (/^[A-Z][2O][IL1O]$/.test(normalized)) {
+        normalized = normalized.charAt(0) + '21';
+    } else if (/^[A-Z][1IL1O]4$/.test(normalized)) {
+        normalized = normalized.charAt(0) + '14';
+    } else if (/^[A-Z][2O]4$/.test(normalized)) {
+        normalized = normalized.charAt(0) + '24';
+    } else if (/^[A-Z][2O][2O]$/.test(normalized)) {
+        normalized = normalized.charAt(0) + '22';
+    } else if (/^[A-Z][2O]3$/.test(normalized)) {
+        normalized = normalized.charAt(0) + '23';
+    } else if (/^[A-Z][1IL1O][2O]$/.test(normalized)) {
+        normalized = normalized.charAt(0) + '12';
+    } else if (/^[A-Z][1IL1O]3$/.test(normalized)) {
+        normalized = normalized.charAt(0) + '13';
+    }
+    
+    return normalized;
+}
+
+function normalizeCourseCode(code: string): string {
+    let normalized = code.toUpperCase().replace(/\s+/g, '');
+    const prefix = normalized.replace(/[^A-Z]/g, '');
+    let suffix = normalized.substring(prefix.length);
+    
+    // Replace common OCR errors in numeric section
+    suffix = suffix
+        .replace(/[OL]/g, '0')
+        .replace(/[I|l]/g, '1');
+        
+    return prefix + suffix;
+}
+
+/**
  * VIT slot → { day, timeSlot } mapping.
  *
  * VIT timetable uses a fixed slot grid. Each slot code like "A11", "B21" etc.
@@ -30,6 +74,16 @@ const THEORY_SLOT_MAP: Record<string, SlotInfo> = {
     'TG1': { day: 'Monday',    time: '13:15 - 14:45' },
     'B1':  { day: 'Monday',    time: '14:50 - 16:20' },
     'G1':  { day: 'Monday',    time: '16:25 - 17:55' },
+    
+    // Monday (Expanded CAL/FFCS presets e.g. VIT Bhopal / Chennai)
+    'A11': { day: 'Monday',    time: '08:30 - 10:00' },
+    'B11': { day: 'Monday',    time: '10:05 - 11:35' },
+    'C11': { day: 'Monday',    time: '11:40 - 13:10' },
+    'A21': { day: 'Monday',    time: '13:15 - 14:45' },
+    'A14': { day: 'Monday',    time: '14:50 - 16:20' },
+    'B21': { day: 'Monday',    time: '16:25 - 17:55' },
+    'C21': { day: 'Monday',    time: '18:00 - 19:30' },
+
     // Tuesday
     'A2':  { day: 'Tuesday',   time: '08:30 - 10:00' },
     'F2':  { day: 'Tuesday',   time: '10:05 - 11:35' },
@@ -38,24 +92,71 @@ const THEORY_SLOT_MAP: Record<string, SlotInfo> = {
     'TG2': { day: 'Tuesday',   time: '13:15 - 14:45' },
     'B2':  { day: 'Tuesday',   time: '14:50 - 16:20' },
     'G2':  { day: 'Tuesday',   time: '16:25 - 17:55' },
+    
+    // Tuesday (Expanded CAL/FFCS presets)
+    'D11': { day: 'Tuesday',   time: '08:30 - 10:00' },
+    'E11': { day: 'Tuesday',   time: '10:05 - 11:35' },
+    'F11': { day: 'Tuesday',   time: '11:40 - 13:10' },
+    'D21': { day: 'Tuesday',   time: '13:15 - 14:45' },
+    'E14': { day: 'Tuesday',   time: '14:50 - 16:20' },
+    'E21': { day: 'Tuesday',   time: '16:25 - 17:55' },
+    'F21': { day: 'Tuesday',   time: '18:00 - 19:30' },
+
     // Wednesday
     'C1':  { day: 'Wednesday', time: '08:30 - 10:00' },
     'E1':  { day: 'Wednesday', time: '10:05 - 11:35' },
     'TC1': { day: 'Wednesday', time: '11:40 - 13:10' },
     'TAA1':{ day: 'Wednesday', time: '11:40 - 13:10' },
-    'A11': { day: 'Wednesday', time: '13:15 - 14:45' }, // some formats use A11
     'TA1': { day: 'Wednesday', time: '13:15 - 14:45' },
+    
+    // Wednesday (Expanded CAL/FFCS presets)
+    'A12': { day: 'Wednesday', time: '08:30 - 10:00' },
+    'B12': { day: 'Wednesday', time: '10:05 - 11:35' },
+    'C12': { day: 'Wednesday', time: '11:40 - 13:10' },
+    'A22': { day: 'Wednesday', time: '13:15 - 14:45' },
+    'B14': { day: 'Wednesday', time: '14:50 - 16:20' },
+    'B22': { day: 'Wednesday', time: '16:25 - 17:55' },
+    'A24': { day: 'Wednesday', time: '18:00 - 19:30' },
+
     // Thursday
     'C2':  { day: 'Thursday',  time: '08:30 - 10:00' },
     'E2':  { day: 'Thursday',  time: '10:05 - 11:35' },
     'TC2': { day: 'Thursday',  time: '11:40 - 13:10' },
     'TAA2':{ day: 'Thursday',  time: '11:40 - 13:10' },
     'TA2': { day: 'Thursday',  time: '13:15 - 14:45' },
+    
+    // Thursday (Expanded CAL/FFCS presets)
+    'D12': { day: 'Thursday',  time: '08:30 - 10:00' },
+    'E12': { day: 'Thursday',  time: '10:05 - 11:35' },
+    'F12': { day: 'Thursday',  time: '11:40 - 13:10' },
+    'D22': { day: 'Thursday',  time: '13:15 - 14:45' },
+    'F14': { day: 'Thursday',  time: '14:50 - 16:20' },
+    'E22': { day: 'Thursday',  time: '16:25 - 17:55' },
+    'F22': { day: 'Thursday',  time: '18:00 - 19:30' },
+
     // Friday
     'F3':  { day: 'Friday',    time: '08:30 - 10:00' },
     'E3':  { day: 'Friday',    time: '10:05 - 11:35' },
     'TD1': { day: 'Friday',    time: '11:40 - 13:10' },
     'TD2': { day: 'Friday',    time: '13:15 - 14:45' },
+    
+    // Friday (Expanded CAL/FFCS presets)
+    'A13': { day: 'Friday',    time: '08:30 - 10:00' },
+    'B13': { day: 'Friday',    time: '10:05 - 11:35' },
+    'C13': { day: 'Friday',    time: '11:40 - 13:10' },
+    'A23': { day: 'Friday',    time: '13:15 - 14:45' },
+    'C14': { day: 'Friday',    time: '14:50 - 16:20' },
+    'B23': { day: 'Friday',    time: '16:25 - 17:55' },
+    'B24': { day: 'Friday',    time: '18:00 - 19:30' },
+
+    // Saturday (Expanded CAL/FFCS presets)
+    'D13': { day: 'Saturday',  time: '08:30 - 10:00' },
+    'E13': { day: 'Saturday',  time: '10:05 - 11:35' },
+    'F13': { day: 'Saturday',  time: '11:40 - 13:10' },
+    'D23': { day: 'Saturday',  time: '13:15 - 14:45' },
+    'D14': { day: 'Saturday',  time: '14:50 - 16:20' },
+    'D24': { day: 'Saturday',  time: '16:25 - 17:55' },
+    'E23': { day: 'Saturday',  time: '18:00 - 19:30' },
 }
 
 // Lab slot pairs — each cell in VIT lab timetable is Lnn+Lnn
@@ -125,42 +226,93 @@ const LAB_SLOT_MAP: Record<string, SlotInfo> = {
 }
 
 /**
- * Perform offline OCR on a VIT timetable image.
- * Does NOT require day name and course code to be on the same line.
- * Instead, scans all OCR text for slot codes and maps them via the fixed VIT slot table.
+ * Pre-process the timetable image on a canvas to remove colored backgrounds
+ * (pink, red, grey cells common in VIT timetables) and produce a clean
+ * black-text-on-white image for Tesseract.
  */
+async function preprocessImage(file: File): Promise<HTMLCanvasElement> {
+    return new Promise((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => {
+            // Scale up small images for better OCR
+            const scale = Math.max(1, Math.ceil(2000 / Math.max(img.width, img.height)))
+            const w = img.width * scale
+            const h = img.height * scale
+
+            const canvas = document.createElement('canvas')
+            canvas.width = w
+            canvas.height = h
+            const ctx = canvas.getContext('2d')!
+            ctx.drawImage(img, 0, 0, w, h)
+
+            const imageData = ctx.getImageData(0, 0, w, h)
+            const d = imageData.data
+
+            for (let i = 0; i < d.length; i += 4) {
+                const r = d[i], g = d[i + 1], b = d[i + 2]
+                // Luminance (perceived brightness)
+                const lum = 0.299 * r + 0.587 * g + 0.114 * b
+
+                // Keep dark text-like pixels as black, everything else white.
+                // Text is dark (low luminance). Threshold tuned to support all custom slot colors.
+                const isText = lum < 125
+                d[i] = d[i + 1] = d[i + 2] = isText ? 0 : 255
+            }
+
+            ctx.putImageData(imageData, 0, 0)
+            resolve(canvas)
+        }
+        img.onerror = reject
+        img.src = URL.createObjectURL(file)
+    })
+}
+
 export async function parseTimetableImage(file: File): Promise<{ classes: any[] }> {
+    let source: any = file
+    try {
+        if (typeof window !== 'undefined') {
+            const canvas = await preprocessImage(file)
+            if (canvas.width > 0 && canvas.height > 0) {
+                source = canvas
+            }
+        }
+    } catch (e) {
+        console.error('Image preprocessing failed, falling back to original:', e)
+    }
+
     const worker = await createWorker('eng')
     await worker.setParameters({
         preserve_interword_spaces: '1',
-        // Treat image as a single uniform block for better grid reading
         tessedit_pageseg_mode: '6' as any,
     })
 
-    const { data } = await worker.recognize(file)
+    const { data } = await worker.recognize(source)
     await worker.terminate()
 
     const rawText = data.text
     console.log('OCR raw text:\n', rawText)
 
     const classes: any[] = []
-    const seen = new Set<string>() // deduplicate slot+code combos
+    const seen = new Set<string>()
 
     // Normalise: collapse whitespace, remove newlines for global scan
     const text = rawText.replace(/\s+/g, ' ').toUpperCase()
 
     // ------------------------------------------------------------------
-    // Strategy 1: Look for full VIT slot entries in format:
-    //   SLOTCODE-COURSECODE-TYPE-VENUE  e.g. A1-CSE3009-TH-AB1-412
-    //   or partial matches without venue
+    // Strategy: Look for full VIT slot entries in format:
+    //   SLOTCODE-COURSECODE-TYPE-VENUE  e.g. B11-MAT1001-LT-AB-301-FS
     // ------------------------------------------------------------------
-    const fullSlotRegex = /\b([A-Z]{1,3}\d{1,2})\s*[-–]\s*([A-Z]{2,4}\d{3,4}[A-Z]?)\s*[-–]\s*([A-Z]{1,3})\b/g
+    const fullSlotRegex = /\b([A-Z]{1,3}[0-9IL1O]{1,2})\s*[-–\s\/\.]\s*([A-Z]{2,4}[0-9IL1O]{3,4}[A-Z]?)\s*[-–\s\/\.]\s*([A-Z]{1,3})(?:\s*[-–\s\/\.]\s*([A-Z0-9]+(?:[-–\s\/\.][A-Z0-9]+)*))?\b/g
     let match: RegExpExecArray | null
 
     while ((match = fullSlotRegex.exec(text)) !== null) {
-        const slotCode = match[1]
-        const courseCode = match[2]
+        const rawSlotCode = match[1]
+        const rawCourseCode = match[2]
         const courseType = match[3]
+        const rawLocation = match[4]
+
+        const slotCode = normalizeSlotCode(rawSlotCode)
+        const courseCode = normalizeCourseCode(rawCourseCode)
 
         const slotInfo = THEORY_SLOT_MAP[slotCode] || LAB_SLOT_MAP[slotCode]
         if (!slotInfo) continue
@@ -169,58 +321,20 @@ export async function parseTimetableImage(file: File): Promise<{ classes: any[] 
         if (seen.has(key)) continue
         seen.add(key)
 
+        let location = ''
+        if (rawLocation) {
+            location = rawLocation.replace(/-FS$/, '').trim()
+        }
+
         classes.push({
             day: slotInfo.day,
             time: slotInfo.time,
-            subject: `${slotCode}-${courseCode}-${courseType}`,
-            location: '',
+            // CRITICAL FIX: Only include courseCode and courseType. 
+            // Do NOT include slotCode in the subject! This fixes the UI color mixing bug!
+            subject: `${courseCode}-${courseType}`,
+            location: location,
             slot: slotCode,
         })
-    }
-
-    // ------------------------------------------------------------------
-    // Strategy 2: If strategy 1 found nothing, scan for course codes
-    //   anywhere near a recognisable slot code (within ±30 chars)
-    // ------------------------------------------------------------------
-    if (classes.length === 0) {
-        // Find all slot code positions
-        const slotRegex = /\b([A-Z]{1,3}\d{1,2})\b/g
-        const courseCodeRegex = /\b([A-Z]{2,4}\d{3,4}[A-Z]?)\b/g
-
-        // Collect all course code positions
-        const coursePositions: { code: string; index: number }[] = []
-        let cm: RegExpExecArray | null
-        while ((cm = courseCodeRegex.exec(text)) !== null) {
-            coursePositions.push({ code: cm[1], index: cm.index })
-        }
-
-        let sm: RegExpExecArray | null
-        while ((sm = slotRegex.exec(text)) !== null) {
-            const slotCode = sm[1]
-            const slotInfo = THEORY_SLOT_MAP[slotCode] || LAB_SLOT_MAP[slotCode]
-            if (!slotInfo) continue
-
-            // Find nearest course code within 50 characters
-            const slotIdx = sm.index
-            const nearby = coursePositions.filter(cp => Math.abs(cp.index - slotIdx) <= 50)
-            if (nearby.length === 0) continue
-
-            const closest = nearby.reduce((a, b) =>
-                Math.abs(a.index - slotIdx) < Math.abs(b.index - slotIdx) ? a : b
-            )
-
-            const key = `${slotCode}-${closest.code}`
-            if (seen.has(key)) continue
-            seen.add(key)
-
-            classes.push({
-                day: slotInfo.day,
-                time: slotInfo.time,
-                subject: `${slotCode}-${closest.code}`,
-                location: '',
-                slot: slotCode,
-            })
-        }
     }
 
     console.log(`OCR parsed ${classes.length} classes from timetable image`)

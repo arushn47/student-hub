@@ -165,7 +165,7 @@ export function ImageUploadExtractor({
                 return
             }
 
-            // Client-side local OCR image extraction (completely bypassing Gemini)
+            // Client-side local OCR image extraction for specific types
             if (files.length > 0 && files[0]?.type.startsWith('image/')) {
                 if (type === 'timetable') {
                     setStatusText('Reading timetable locally...')
@@ -212,7 +212,26 @@ export function ImageUploadExtractor({
                     return
                 }
 
-                toast.error(`Local extraction is not supported for ${type} images yet.`)
+                // Fallback to Gemini API for timetable and other image types
+                setStatusText('Analyzing with AI...')
+                const formData = new FormData()
+                files.forEach(f => formData.append('image', f))
+                if (type) formData.append('type', type)
+                
+                const res = await fetch('/api/ai/extract', {
+                    method: 'POST',
+                    body: formData
+                })
+                
+                const result = await res.json()
+                if (!res.ok) {
+                    throw new Error(result.error?.message || result.error || 'Failed to extract data')
+                }
+                
+                onExtract(result.data)
+                setOpen(false)
+                reset()
+                toast.success('Successfully extracted data!')
             }
         } catch (error: unknown) {
             console.error('Extraction error:', error instanceof Error ? error.message : error)

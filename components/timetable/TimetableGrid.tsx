@@ -18,13 +18,15 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import { Plus, Clock, Trash2, GraduationCap, Settings } from 'lucide-react'
+import { Plus, Clock, Trash2, GraduationCap, Settings, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ImageUploadExtractor } from '@/components/ai/ImageUploadExtractor'
 import Link from 'next/link'
-import { ensureDefaultSemesters } from '@/lib/semester-utils'
+
 import type { ClassSchedule, Semester } from '@/types'
+import { SemesterSetupWizard } from '@/components/settings/SemesterSetupWizard'
+import { withTimeout } from '@/lib/network-utils'
 
 interface TimetableGridProps {
     initialClasses: ClassSchedule[]
@@ -67,6 +69,7 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
         initialSemesters.find(s => s.is_active)?.id || initialSemesters[0]?.id || ''
     )
     const [createDialog, setCreateDialog] = useState(false)
+    const [wizardOpen, setWizardOpen] = useState(false)
     const [newClass, setNewClass] = useState({
         name: '',
         short_name: '',
@@ -132,20 +135,28 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
         if (classesToUpdate.length === 0) return
 
         // Update in database
-        for (const update of classesToUpdate) {
-            await supabase
-                .from('class_schedules')
-                .update({ color: update.color })
-                .eq('id', update.id)
+        try {
+            for (const update of classesToUpdate) {
+                await withTimeout(async () => {
+                    const { error } = await supabase
+                        .from('class_schedules')
+                        .update({ color: update.color })
+                        .eq('id', update.id)
+                    if (error) throw error
+                })
+            }
+
+            // Update local state
+            setClasses(prev => prev.map(cls => {
+                const update = classesToUpdate.find(u => u.id === cls.id)
+                return update ? { ...cls, color: update.color } : cls
+            }))
+
+            toast.success(`Synced colors for ${classesToUpdate.length} classes`)
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Unknown error'
+            toast.error(`Failed to sync colors: ${msg}`)
         }
-
-        // Update local state
-        setClasses(prev => prev.map(cls => {
-            const update = classesToUpdate.find(u => u.id === cls.id)
-            return update ? { ...cls, color: update.color } : cls
-        }))
-
-        toast.success(`Synced colors for ${classesToUpdate.length} classes`)
     }
 
     // Auto-sync colors on initial load
@@ -178,10 +189,13 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
 
             // Update in database silently
             for (const update of classesToUpdate) {
-                await supabase
-                    .from('class_schedules')
-                    .update({ color: update.color })
-                    .eq('id', update.id)
+                await withTimeout(async () => {
+                    const { error } = await supabase
+                        .from('class_schedules')
+                        .update({ color: update.color })
+                        .eq('id', update.id)
+                    if (error) throw error
+                }).catch((e) => console.error('Silent auto-sync color error:', e))
             }
 
             // Update local state
@@ -205,10 +219,13 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
             if (classesWithoutSemester.length > 0) {
                 // Update in database silently
                 for (const cls of classesWithoutSemester) {
-                    await supabase
-                        .from('class_schedules')
-                        .update({ semester_id: selectedSemester })
-                        .eq('id', cls.id)
+                    await withTimeout(async () => {
+                        const { error } = await supabase
+                            .from('class_schedules')
+                            .update({ semester_id: selectedSemester })
+                            .eq('id', cls.id)
+                        if (error) throw error
+                    }).catch((e) => console.error('Silent fixClasses error:', e))
                 }
                 // Update local state
                 setClasses(prev => prev.map(c => !c.semester_id ? { ...c, semester_id: selectedSemester } : c))
@@ -224,67 +241,79 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
             return
         }
 
-        const { data, error } = await supabase
-            .from('class_schedules')
-            .insert({
-                user_id: userId,
-                ...newClass,
-                semester_id: selectedSemester,
+        try {
+            const data = await withTimeout(async () => {
+                const res = await supabase
+                    .from('class_schedules')
+                    .insert({
+                        user_id: userId,
+                        ...newClass,
+                        semester_id: selectedSemester,
+                    })
+                    .select()
+                    .single()
+                if (res.error) throw res.error
+                return res.data
             })
-            .select()
-            .single()
 
-        if (error) {
-            toast.error('Failed to create class')
-            return
+            setClasses((prev) => [...prev, data as ClassSchedule])
+            setCreateDialog(false)
+            setNewClass({
+                name: '',
+                short_name: '',
+                instructor: '',
+                location: '',
+                color: colors[0],
+                day_of_week: 1,
+                start_time: '08:00',
+                end_time: '09:00',
+            })
+            toast.success('Class added to timetable')
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Unknown error'
+            toast.error(`Failed to create class: ${msg}`)
         }
-
-        setClasses((prev) => [...prev, data as ClassSchedule])
-        setCreateDialog(false)
-        setNewClass({
-            name: '',
-            short_name: '',
-            instructor: '',
-            location: '',
-            color: colors[0],
-            day_of_week: 1,
-            start_time: '08:00',
-            end_time: '09:00',
-        })
-        toast.success('Class added to timetable')
     }
 
     const deleteClass = async (classId: string) => {
-        const { error } = await supabase.from('class_schedules').delete().eq('id', classId)
+        try {
+            await withTimeout(async () => {
+                const { error } = await supabase.from('class_schedules').delete().eq('id', classId)
+                if (error) throw error
+            })
 
-        if (error) {
-            toast.error('Failed to delete class')
-            return
+            setClasses((prev) => prev.filter((c) => c.id !== classId))
+            toast.success('Class deleted')
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Unknown error'
+            toast.error(`Failed to delete class: ${msg}`)
         }
-
-        setClasses((prev) => prev.filter((c) => c.id !== classId))
-        toast.success('Class deleted')
     }
 
     const clearSchedule = async () => {
         if (!confirm('Are you sure you want to clear your entire schedule?')) return
 
-        let query = supabase.from('class_schedules').delete().eq('user_id', userId)
+        try {
+            await withTimeout(async () => {
+                let query = supabase.from('class_schedules').delete().eq('user_id', userId)
 
-        if (selectedSemester) {
-            query = query.eq('semester_id', selectedSemester)
-        }
+                if (selectedSemester) {
+                    query = query.eq('semester_id', selectedSemester)
+                }
 
-        const { error } = await query
-        if (error) {
-            toast.error('Failed to clear schedule')
-        } else {
+                const { error } = await query
+                if (error) throw error
+            })
+
             if (selectedSemester !== 'all') {
                 setClasses(prev => prev.filter(c => c.semester_id !== selectedSemester))
             } else {
                 setClasses([])
             }
             toast.success('Schedule cleared')
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Unknown error'
+            toast.error(`Failed to clear schedule: ${msg}`)
         }
     }
 
@@ -307,6 +336,58 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
     }
 
     const selectedSemesterName = semesters.find(s => s.id === selectedSemester)?.name
+
+    if (semesters.length === 0) {
+        return (
+            <div className="space-y-7">
+                <div>
+                    <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <Clock className="h-6 w-6 text-cyan-400" />
+                        Class Timetable
+                    </h1>
+                    <p className="text-gray-400 text-sm mt-1">
+                        Visualize your weekly schedule
+                    </p>
+                </div>
+                
+                <div className="p-8 md:p-12 rounded-3xl bg-gradient-to-br from-purple-500/[0.03] via-background to-indigo-500/[0.03] border border-white/5 shadow-2xl text-center max-w-2xl mx-auto my-10 animate-in fade-in duration-300">
+                    <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mx-auto mb-6 border border-purple-500/20 text-purple-400">
+                        <GraduationCap className="h-8 w-8" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-3">Set Up Your Semesters</h3>
+                    <p className="text-gray-400 text-sm max-w-md mx-auto mb-8 leading-relaxed">
+                        To construct your class timetable, you need to configure your academic semesters first. Use our quick 1-click setup wizard to create your entire degree program timeline instantly!
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+                        <Button
+                            onClick={() => setWizardOpen(true)}
+                            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl px-6 py-5 font-semibold flex items-center gap-1.5 shadow-lg shadow-purple-900/30 w-full sm:w-auto cursor-pointer"
+                        >
+                            <Sparkles className="h-4 w-4 animate-pulse" />
+                            Launch Setup Wizard
+                        </Button>
+                        <Link href="/dashboard/settings/semesters" className="w-full sm:w-auto">
+                            <Button
+                                variant="outline"
+                                className="border-white/10 text-gray-300 hover:bg-white/5 rounded-xl px-6 py-5 w-full cursor-pointer"
+                            >
+                                Manual Settings
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+
+                <SemesterSetupWizard
+                    isOpen={wizardOpen}
+                    onOpenChange={setWizardOpen}
+                    onComplete={() => {
+                        window.location.reload()
+                    }}
+                    userId={userId}
+                />
+            </div>
+        )
+    }
 
     return (
         <div className="space-y-7">
@@ -374,14 +455,22 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
                                         'Sunday': 0, 'Sun': 0
                                     }
 
+                                    const getBaseCourse = (name: string) => {
+                                        const parts = name.split('-').map(p => p.trim().toUpperCase())
+                                        if (parts.length > 1 && /^[A-Z]{1,3}\d{1,2}$/.test(parts[0])) {
+                                            return parts[1]
+                                        }
+                                        return parts[0]
+                                    }
+
                                     // Create a local color map for the new classes combined with existing classes
                                     const allUniqueSubjects = new Set<string>()
                                     for (const existingCls of classes) {
-                                        allUniqueSubjects.add(existingCls.name.split('-')[0].trim().toUpperCase())
+                                        allUniqueSubjects.add(getBaseCourse(existingCls.name))
                                     }
                                     for (const newCls of data.classes) {
                                         const subjectName = newCls.subject || newCls.name || 'Unknown'
-                                        allUniqueSubjects.add(subjectName.split('-')[0].trim().toUpperCase())
+                                        allUniqueSubjects.add(getBaseCourse(subjectName))
                                     }
 
                                     const localColorMap = new Map<string, string>()
@@ -413,7 +502,7 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
                                         }
 
                                         const courseName = cls.subject || cls.name || 'Unknown Class'
-                                        const baseCourse = courseName.split('-')[0].trim().toUpperCase()
+                                        const baseCourse = getBaseCourse(courseName)
 
                                         return {
                                             user_id: userId,
@@ -427,12 +516,14 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
                                         }
                                     })
 
-                                    const { data: inserted, error } = await supabase
-                                        .from('class_schedules')
-                                        .insert(classesToInsert)
-                                        .select()
-
-                                    if (error) throw error
+                                    const { data: inserted, error } = await withTimeout(async () => {
+                                        const res = await supabase
+                                            .from('class_schedules')
+                                            .insert(classesToInsert)
+                                            .select()
+                                        if (res.error) throw res.error
+                                        return res
+                                    })
 
                                     if (inserted) {
                                         setClasses(prev => [...prev, ...inserted as ClassSchedule[]])
@@ -440,7 +531,8 @@ export function TimetableGrid({ initialClasses, initialSemesters, userId }: Time
                                     }
                                 } catch (e: unknown) {
                                     console.error('Timetable extract error:', e)
-                                    toast.error('Failed to import timetable')
+                                    const errMsg = e instanceof Error ? e.message : 'Unknown error'
+                                    toast.error(`Failed to import timetable: ${errMsg}`)
                                 }
                             }
                         }}

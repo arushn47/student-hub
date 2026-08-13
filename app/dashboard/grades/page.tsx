@@ -181,8 +181,7 @@ export default function GradesPage() {
     useEffect(() => {
         const fetchCurriculum = async () => {
             try {
-                const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+                const { data: { user } } = await supabase.auth.getUser()
                 if (!user) return
 
                 const { data, error } = await supabase
@@ -251,8 +250,7 @@ export default function GradesPage() {
             // Skip initial render or if empty
             if (curriculum.length === 0) return
 
-            const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+            const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
             const updates = curriculum.map(c => ({
@@ -274,8 +272,7 @@ export default function GradesPage() {
     useEffect(() => {
         const fetchCourses = async () => {
             try {
-                const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+                const { data: { user } } = await supabase.auth.getUser()
                 if (!user) return
 
                 const { data, error } = await supabase
@@ -309,7 +306,7 @@ export default function GradesPage() {
             }
         }
         fetchCourses()
-    }, [supabase])
+    }, []) // supabase is a stable module singleton — no need in deps
 
     const calculateGPA = (courseList: Course[]): string => {
         if (courseList.length === 0) return '0.00'
@@ -508,8 +505,7 @@ export default function GradesPage() {
 
         try {
             setIsSubmitting(true)
-            const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+            const { data: { user } } = await supabase.auth.getUser()
             if (!user) {
                 toast.error('You must be logged in')
                 return
@@ -604,8 +600,7 @@ export default function GradesPage() {
 
         try {
             setIsSubmitting(true)
-            const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+            const { data: { user } } = await supabase.auth.getUser()
             if (!user) {
                 toast.error('You must be logged in')
                 return
@@ -680,8 +675,7 @@ export default function GradesPage() {
     // Clear all courses
     const clearAllCourses = async () => {
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+            const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
             const { error } = await supabase
@@ -816,8 +810,7 @@ export default function GradesPage() {
                         onExtract={async (data) => {
                             if (data.courses && Array.isArray(data.courses)) {
                                 try {
-                                    const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+                                    const { data: { user } } = await supabase.auth.getUser()
                                     if (!user) return
 
                                     // Build a map of existing courses by name for O(1) lookup

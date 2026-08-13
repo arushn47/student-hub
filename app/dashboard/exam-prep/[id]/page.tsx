@@ -349,8 +349,7 @@ export default function SubjectDetailPage() {
     
     const fetchData = useCallback(async () => {
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+            const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
             // Fetch subject first to validate it exists
@@ -437,8 +436,7 @@ export default function SubjectDetailPage() {
 
         setUploading(moduleId)
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+            const { data: { user } } = await supabase.auth.getUser()
             if (!user) throw new Error('Not authenticated')
 
             const uploadedPaths: string[] = []

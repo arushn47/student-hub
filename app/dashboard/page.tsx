@@ -10,6 +10,7 @@ import { StreakBadge } from '@/components/dashboard/StreakBadge'
 import { cn } from '@/lib/utils'
 import React from 'react'
 import type { Task, Note, ClassSchedule, SemesterBreak, Semester } from '@/types'
+import { SemesterSetupBanner } from '@/components/dashboard/SemesterSetupBanner'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getStats(supabase: any, userId: string) {
@@ -56,6 +57,7 @@ async function getStats(supabase: any, userId: string) {
         classes: (classesResult.data || []) as ClassSchedule[],
         subjects,
         breaks,
+        semesters,
     }
 }
 
@@ -72,8 +74,7 @@ function isOnBreak(date: Date, breaks: SemesterBreak[]): { onBreak: boolean; bre
 
 export default async function DashboardPage() {
     const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+    const { data: { user } } = await supabase.auth.getUser()
 
     // Handle guest mode
     if (!user) {
@@ -83,11 +84,13 @@ export default async function DashboardPage() {
             classes={[]}
             subjects={[]}
             breaks={[]}
+            semesters={[]}
+            userId=""
             userName="Guest"
         />
     }
 
-    const { notes, tasks, classes, subjects, breaks } = await getStats(supabase, user.id)
+    const { notes, tasks, classes, subjects, breaks, semesters } = await getStats(supabase, user.id)
     const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Student'
 
     // Log daily activity server-side (non-blocking)
@@ -106,6 +109,8 @@ export default async function DashboardPage() {
         classes={classes}
         subjects={subjects}
         breaks={breaks}
+        semesters={semesters}
+        userId={user.id}
         userName={firstName}
     />
 }
@@ -116,6 +121,8 @@ function DashboardContent({
     classes,
     subjects,
     breaks,
+    semesters,
+    userId,
     userName
 }: {
     notes: Note[]
@@ -124,6 +131,8 @@ function DashboardContent({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     subjects: any[]
     breaks: SemesterBreak[]
+    semesters: Semester[]
+    userId: string
     userName: string
 }) {
     const completedTasks = tasks.filter(t => t.status === 'done').length
@@ -172,6 +181,11 @@ function DashboardContent({
                     )}
                 </div>
             </div>
+
+            {/* Semester Setup Banner */}
+            {semesters.length === 0 && userId && (
+                <SemesterSetupBanner userId={userId} />
+            )}
 
             {/* Exam Prep Hero */}
             {heroSubject ? (

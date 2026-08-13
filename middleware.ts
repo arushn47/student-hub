@@ -27,12 +27,9 @@ export async function middleware(request: NextRequest) {
         }
     )
 
-    // Use getSession() instead of getUser() to avoid making ANY network requests in the Edge Runtime.
-    // This perfectly bypasses the Indian ISP/Jio IPv6 routing timeout because it parses the JWT cookie locally!
     const {
-        data: { session },
-    } = await supabase.auth.getSession()
-    const user = session?.user
+        data: { user },
+    } = await supabase.auth.getUser()
 
     // Catch auth codes that land on the wrong page (e.g. Supabase falling
     // back to site root when redirect URL isn't in the allowlist).

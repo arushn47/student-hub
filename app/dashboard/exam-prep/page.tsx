@@ -85,8 +85,7 @@ export default function ExamPrepPage() {
 
     const fetchSubjects = async () => {
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+            const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
             const { data, error } = await supabase
@@ -112,8 +111,7 @@ export default function ExamPrepPage() {
             console.error('Error fetching subjects:', error)
             // Try simpler query without join
             try {
-                const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+                const { data: { user } } = await supabase.auth.getUser()
                 if (!user) return
 
                 const { data, error } = await supabase
@@ -140,8 +138,7 @@ export default function ExamPrepPage() {
 
         setCreating(true)
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+            const { data: { user } } = await supabase.auth.getUser()
             if (!user) throw new Error('Not authenticated')
 
             // Create subject
