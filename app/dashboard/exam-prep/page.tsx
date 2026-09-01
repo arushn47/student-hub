@@ -51,6 +51,8 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
+import { useAuth } from '@/lib/auth-context'
+
 interface Subject {
     id: string
     name: string
@@ -64,6 +66,7 @@ interface Subject {
 }
 
 export default function ExamPrepPage() {
+    const { user } = useAuth()
     const [subjects, setSubjects] = useState<Subject[]>([])
     const [loading, setLoading] = useState(true)
     const [creating, setCreating] = useState(false)
@@ -81,21 +84,44 @@ export default function ExamPrepPage() {
     
     useEffect(() => {
         fetchSubjects()
-    }, [])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id])
 
     const fetchSubjects = async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+            // Get user either from context or client with safety timeout
+            let currentUserId = user?.id
+            if (!currentUserId) {
+                const userTimeout = new Promise<{ data: { user: null } }>((resolve) =>
+                    setTimeout(() => resolve({ data: { user: null } }), 3000)
+                )
+                const authRes = await Promise.race([
+                    supabase.auth.getUser(),
+                    userTimeout
+                ])
+                currentUserId = authRes.data.user?.id
+            }
 
-            const { data, error } = await supabase
+            if (!currentUserId) {
+                setLoading(false)
+                return
+            }
+
+            // Fetch subjects with timeout safety
+            const queryTimeout = new Promise<{ data: null; error: Error }>((resolve) =>
+                setTimeout(() => resolve({ data: null, error: new Error('Query timeout') }), 6000)
+            )
+
+            const queryPromise = supabase
                 .from('exam_subjects')
                 .select(`
                 *,
                 exam_modules(id, status)
             `)
-                .eq('user_id', user.id)
+                .eq('user_id', currentUserId)
                 .order('created_at', { ascending: false })
+
+            const { data, error } = await Promise.race([queryPromise, queryTimeout])
 
             if (error) throw error
 
@@ -109,21 +135,22 @@ export default function ExamPrepPage() {
             setSubjects(processedData)
         } catch (error) {
             console.error('Error fetching subjects:', error)
-            // Try simpler query without join
+            // Try simpler fallback query without join
             try {
-                const { data: { user } } = await supabase.auth.getUser()
-                if (!user) return
+                const currentUserId = user?.id || (await supabase.auth.getUser()).data.user?.id
+                if (currentUserId) {
+                    const { data, error } = await supabase
+                        .from('exam_subjects')
+                        .select('*')
+                        .eq('user_id', currentUserId)
+                        .order('created_at', { ascending: false })
 
-                const { data, error } = await supabase
-                    .from('exam_subjects')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: false })
-
-                if (error) throw error
-                setSubjects(data?.map(s => ({ ...s, modules_ready: 0 })) || [])
+                    if (!error && data) {
+                        setSubjects(data.map(s => ({ ...s, modules_ready: 0 })))
+                    }
+                }
             } catch (e) {
-                console.error('Error:', e)
+                console.error('Fallback query error:', e)
             }
         } finally {
             setLoading(false)

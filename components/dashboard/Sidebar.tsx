@@ -245,11 +245,10 @@ export function Sidebar({ user }: SidebarProps) {
         window.location.href = '/login'
     }
 
-    // Filter nav items by feature flags (admins bypass)
+    // Filter nav items by feature flags
     const filterByFlags = (items: NavItem[]) =>
         items.filter(item => {
             if (!item.featureFlag) return true
-            if (isAdmin) return true
             return isFeatureEnabled(item.featureFlag)
         })
 
@@ -423,11 +422,10 @@ export function MobileSidebar({ user }: SidebarProps) {
         window.location.href = '/login'
     }
 
-    // Filter nav items by feature flags (admins bypass)
+    // Filter nav items by feature flags
     const filterByFlags = (items: NavItem[]) =>
         items.filter(item => {
             if (!item.featureFlag) return true
-            if (isAdmin) return true
             return isFeatureEnabled(item.featureFlag)
         })
 

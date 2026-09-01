@@ -70,6 +70,7 @@ import {
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useAuth } from '@/lib/auth-context'
 
 interface Subject {
     id: string
@@ -347,19 +348,41 @@ export default function SubjectDetailPage() {
     const [showSubjectQuestions, setShowSubjectQuestions] = useState(false)
 
     
+    const { user } = useAuth()
+
     const fetchData = useCallback(async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+            let currentUserId = user?.id
+            if (!currentUserId) {
+                const userTimeout = new Promise<{ data: { user: null } }>((resolve) =>
+                    setTimeout(() => resolve({ data: { user: null } }), 3000)
+                )
+                const authRes = await Promise.race([
+                    supabase.auth.getUser(),
+                    userTimeout
+                ])
+                currentUserId = authRes.data.user?.id
+            }
 
-            // Fetch subject first to validate it exists
-            const { data: subjectData } = await supabase
+            if (!currentUserId) {
+                setLoading(false)
+                return
+            }
+
+            // Fetch subject first to validate it exists with safety timeout
+            const queryTimeout = new Promise<{ data: null; error: Error }>((resolve) =>
+                setTimeout(() => resolve({ data: null, error: new Error('Query timeout') }), 6000)
+            )
+
+            const subjectPromise = supabase
                 .from('exam_subjects')
                 .select('*')
                 .eq('id', subjectId)
                 .single()
 
-            if (!subjectData) {
+            const { data: subjectData, error: subjectError } = await Promise.race([subjectPromise, queryTimeout])
+
+            if (subjectError || !subjectData) {
                 router.push('/dashboard/exam-prep')
                 return
             }
@@ -393,7 +416,7 @@ export default function SubjectDetailPage() {
         } finally {
             setLoading(false)
         }
-    }, [subjectId, router])
+    }, [user?.id, subjectId, router])
 
     useEffect(() => {
         fetchData()
