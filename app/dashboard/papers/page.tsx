@@ -48,16 +48,21 @@ export default function QuestionPapersPage() {
 
     const fetchPapers = useCallback(async () => {
         setLoading(true)
-        const { data, error } = await supabase
-            .from('question_papers')
-            .select('*')
-            .order('created_at', { ascending: false })
+        try {
+            const { data, error } = await supabase
+                .from('question_papers')
+                .select('*')
+                .order('created_at', { ascending: false })
 
-        if (!error && data) {
-            setPapers(data)
+            if (!error && data) {
+                setPapers(data)
+            }
+        } catch (err) {
+            console.error('Error fetching question papers:', err)
+        } finally {
+            setLoading(false)
         }
-        setLoading(false)
-    }, [supabase])
+    }, [])
 
     useEffect(() => {
         fetchPapers()

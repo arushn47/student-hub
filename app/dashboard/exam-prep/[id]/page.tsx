@@ -36,7 +36,8 @@ import {
     File,
     Trash2,
     ExternalLink,
-    Download
+    Download,
+    Copy
 } from 'lucide-react'
 import {
     DropdownMenu,
@@ -346,6 +347,7 @@ export default function SubjectDetailPage() {
     const [subjectQuestions, setSubjectQuestions] = useState('')
     const [isSavingSubjectQuestions, setIsSavingSubjectQuestions] = useState(false)
     const [showSubjectQuestions, setShowSubjectQuestions] = useState(false)
+    const [generatingNotes, setGeneratingNotes] = useState<string | null>(null)
 
     
     const { user } = useAuth()
@@ -369,9 +371,9 @@ export default function SubjectDetailPage() {
                 return
             }
 
-            // Fetch subject first to validate it exists with safety timeout
+            // Fetch subject first to validate it exists with safety timeout (12s buffer)
             const queryTimeout = new Promise<{ data: null; error: Error }>((resolve) =>
-                setTimeout(() => resolve({ data: null, error: new Error('Query timeout') }), 6000)
+                setTimeout(() => resolve({ data: null, error: new Error('Query timeout') }), 12000)
             )
 
             const subjectPromise = supabase
@@ -443,9 +445,11 @@ export default function SubjectDetailPage() {
 
     useEffect(() => {
         if (flashcardModuleId) return
-        if (modules.length === 0 || flashcards.length === 0) return
+        if (modules.length === 0) return
         const firstWithFlashcards = modules.find(m => flashcards.some(f => f.module_id === m.id))
-        if (firstWithFlashcards) setFlashcardModuleId(firstWithFlashcards.id)
+        const firstReady = modules.find(m => m.status === 'ready')
+        const target = firstWithFlashcards || firstReady || modules[0]
+        if (target) setFlashcardModuleId(target.id)
     }, [flashcards, modules, flashcardModuleId])
 
     const handleFileUpload = async (moduleId: string, files: File[]) => {
@@ -577,10 +581,22 @@ export default function SubjectDetailPage() {
                     const error = await response.json()
                     if (response.status === 429) {
                         shouldMarkError = false
-                        const retry = typeof error?.retryAfterSeconds === 'number' ? error.retryAfterSeconds : undefined
-                        message = retry
-                            ? `Rate limited. Try again in ~${retry}s.`
-                            : 'Rate limited. Try again in a moment.'
+                        const retry = typeof error?.retryAfterSeconds === 'number'
+                            ? error.retryAfterSeconds
+                            : error?.resetAt
+                            ? Math.max(1, Math.ceil((new Date(error.resetAt).getTime() - Date.now()) / 1000))
+                            : undefined
+
+                        if (error?.error && typeof error.error === 'string') {
+                            message = error.error.replace(/^rate limit exceeded[.:\s-]*/i, '')
+                        } else if (retry && retry < 120) {
+                            message = `AI is catching its breath! ⏱️ Ready in ~${retry}s. Perfect time to review the flashcards and questions on your ready modules! 💡`
+                        } else if (retry) {
+                            const mins = Math.ceil(retry / 60)
+                            message = `Taking a quick breather! ⏳ Ready in ~${mins}m. Study the questions already generated while we get ready! 📚`
+                        } else {
+                            message = 'AI is taking a quick breather! ⏳ Ready in a moment. Review your ready modules while we prepare! 📚'
+                        }
 
                         // Don't leave the module stuck in "processing".
                         await supabase
@@ -605,7 +621,13 @@ export default function SubjectDetailPage() {
             fetchData()
         } catch (error) {
             const isAbort = error instanceof DOMException && error.name === 'AbortError'
-            if (isAbort) {
+            if (!shouldMarkError) {
+                // Friendly rate limit toast with helpful prompt to study existing modules
+                toast.info(error instanceof Error ? error.message : 'AI is resting for a moment', {
+                    id: processingToastId,
+                    duration: 8000,
+                })
+            } else if (isAbort) {
                 toast.error(
                     `Processing timed out after ${Math.round(timeoutMs / 1000)}s. Try reprocessing (or upload fewer files).`,
                     { id: processingToastId }
@@ -621,7 +643,7 @@ export default function SubjectDetailPage() {
                 toast.error(error instanceof Error ? error.message : 'Failed to process module', { id: processingToastId })
             }
 
-            // Update status to error
+            // Update status to error only on fatal errors
             if (shouldMarkError) {
                 await supabase
                     .from('exam_modules')
@@ -656,6 +678,41 @@ export default function SubjectDetailPage() {
         } catch (error) {
             console.error(error)
             toast.error('Failed to shrink summary', { id: toastId })
+        }
+    }
+
+    const handleGenerateNotes = async (moduleId: string) => {
+        setGeneratingNotes(moduleId)
+        const toastId = toast.loading('Generating topic cheat sheet with AI...')
+        try {
+            const response = await fetch('/api/exam-prep/generate-notes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ moduleId })
+            })
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}))
+                if (response.status === 429) {
+                    const msg = err.error || 'AI is taking a quick breather. Try again shortly!'
+                    toast.info(msg, { id: toastId, duration: 6000 })
+                    return
+                }
+                throw new Error(err.error || 'Failed to generate cheat sheet')
+            }
+
+            const data = await response.json()
+            if (data.summary) {
+                setModules(prev => prev.map(m =>
+                    m.id === moduleId ? { ...m, summary: data.summary } : m
+                ))
+                toast.success('Topic cheat sheet ready!', { id: toastId })
+            }
+        } catch (error) {
+            console.error('Generate notes error:', error)
+            toast.error(error instanceof Error ? error.message : 'Failed to generate notes', { id: toastId })
+        } finally {
+            setGeneratingNotes(null)
         }
     }
 
@@ -835,7 +892,7 @@ export default function SubjectDetailPage() {
 
                 {/* Flashcards Tab */}
                 <TabsContent value="flashcards">
-                    {flashcards.length === 0 ? (
+                    {modules.filter(m => m.status === 'ready' || flashcards.some(f => f.module_id === m.id)).length === 0 ? (
                         <Card className="glass-card">
                             <CardContent className="py-12 text-center">
                                 <Layers className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
@@ -856,12 +913,15 @@ export default function SubjectDetailPage() {
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {modules
-                                                    .filter(m => flashcards.some(f => f.module_id === m.id))
-                                                    .map(m => (
-                                                        <SelectItem key={m.id} value={m.id}>
-                                                            {m.name}
-                                                        </SelectItem>
-                                                    ))}
+                                                    .filter(m => m.status === 'ready' || flashcards.some(f => f.module_id === m.id))
+                                                    .map(m => {
+                                                        const count = flashcards.filter(f => f.module_id === m.id).length
+                                                        return (
+                                                            <SelectItem key={m.id} value={m.id}>
+                                                                {m.name} {count > 0 ? `(${count})` : '(0 cards)'}
+                                                            </SelectItem>
+                                                        )
+                                                    })}
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -873,6 +933,16 @@ export default function SubjectDetailPage() {
                                     <CardContent className="py-12 text-center">
                                         <Layers className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
                                         <p className="text-muted-foreground">No flashcards for this module yet</p>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => handleReprocess(flashcardModuleId)}
+                                            disabled={processing === flashcardModuleId}
+                                            className="mt-4 gap-2 border-purple-500/30 hover:bg-purple-500/10"
+                                        >
+                                            <Sparkles className="h-4 w-4 text-purple-400" />
+                                            Generate Flashcards
+                                        </Button>
                                     </CardContent>
                                 </Card>
                             ) : (
@@ -884,54 +954,121 @@ export default function SubjectDetailPage() {
 
                 {/* Notes Tab */}
                 <TabsContent value="notes" className="space-y-4">
-                    {modules.filter(m => m.status === 'ready' && m.summary).length === 0 ? (
+                    {modules.filter(m => m.status === 'ready').length === 0 ? (
                         <Card className="glass-card">
                             <CardContent className="py-12 text-center">
                                 <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-                                <p className="text-muted-foreground">Upload and process modules to get short notes</p>
+                                <p className="text-muted-foreground">Upload and process modules to get topic cheat sheets</p>
                             </CardContent>
                         </Card>
                     ) : (
-                        modules.filter(m => m.status === 'ready' && m.summary).map((module) => (
-                            <Collapsible key={module.id} defaultOpen className="group/collapsible">
-                                <Card className="glass-card">
-                                    <CardHeader className="py-4">
-                                        <div className="flex items-center justify-between w-full">
-                                            <CollapsibleTrigger asChild>
-                                                <Button variant="ghost" className="p-0 hover:bg-transparent flex-1 justify-start gap-2 h-auto font-semibold text-lg">
-                                                    <ChevronDown className="h-5 w-5 text-muted-foreground transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
-                                                    <span className="flex items-center gap-2 text-foreground">
-                                                        <FileText className="h-5 w-5 text-blue-400" />
-                                                        {module.name}
-                                                    </span>
-                                                </Button>
-                                            </CollapsibleTrigger>
+                        modules.filter(m => m.status === 'ready').map((module) => {
+                            const isGenerating = generatingNotes === module.id
+                            return (
+                                <Collapsible key={module.id} defaultOpen className="group/collapsible">
+                                    <Card className="glass-card">
+                                        <CardHeader className="py-4">
+                                            <div className="flex items-center justify-between w-full flex-wrap gap-2">
+                                                <CollapsibleTrigger asChild>
+                                                    <Button variant="ghost" className="p-0 hover:bg-transparent flex-1 justify-start gap-2 h-auto font-semibold text-lg">
+                                                        <ChevronDown className="h-5 w-5 text-muted-foreground transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
+                                                        <span className="flex items-center gap-2 text-foreground">
+                                                            <FileText className="h-5 w-5 text-blue-400" />
+                                                            {module.name}
+                                                        </span>
+                                                    </Button>
+                                                </CollapsibleTrigger>
 
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-8 gap-2 text-xs ml-2"
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    handleShrinkSummary(module.id, module.summary || '')
-                                                }}
-                                            >
-                                                <Sparkles className="h-3 w-3 text-amber-500" />
-                                                <span className="hidden sm:inline">Shrink</span>
-                                            </Button>
-                                        </div>
-                                    </CardHeader>
-                                    <CollapsibleContent>
-                                        <CardContent>
-                                            <MarkdownRenderer
-                                                content={module.summary || ''}
-                                                className="prose-pre:bg-muted/50 prose-pre:text-muted-foreground"
-                                            />
-                                        </CardContent>
-                                    </CollapsibleContent>
-                                </Card>
-                            </Collapsible>
-                        ))
+                                                <div className="flex items-center gap-2">
+                                                    {module.summary && (
+                                                        <>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                                                                title="Copy cheat sheet"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    navigator.clipboard.writeText(module.summary || '')
+                                                                    toast.success('Cheat sheet copied to clipboard!')
+                                                                }}
+                                                            >
+                                                                <Copy className="h-4 w-4" />
+                                                            </Button>
+
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-8 gap-1.5 text-xs"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    handleShrinkSummary(module.id, module.summary || '')
+                                                                }}
+                                                            >
+                                                                <Sparkles className="h-3 w-3 text-amber-500" />
+                                                                <span className="hidden sm:inline">Shrink</span>
+                                                            </Button>
+                                                        </>
+                                                    )}
+
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        disabled={isGenerating}
+                                                        className="h-8 gap-1.5 text-xs text-primary border-primary/30 hover:bg-primary/10"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            handleGenerateNotes(module.id)
+                                                        }}
+                                                    >
+                                                        {isGenerating ? (
+                                                            <>
+                                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                                <span>Generating...</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Sparkles className="h-3 w-3" />
+                                                                <span>{module.summary ? 'Regenerate' : 'Generate'}</span>
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </CardHeader>
+                                        <CollapsibleContent>
+                                            <CardContent>
+                                                {module.summary ? (
+                                                    <MarkdownRenderer
+                                                        content={module.summary}
+                                                        className="prose-pre:bg-muted/50 prose-pre:text-muted-foreground"
+                                                    />
+                                                ) : (
+                                                    <div className="text-center py-8 space-y-3">
+                                                        <p className="text-sm text-muted-foreground">
+                                                            No pure topic cheat sheet has been generated for this module yet.
+                                                        </p>
+                                                        <Button
+                                                            size="sm"
+                                                            disabled={isGenerating}
+                                                            onClick={() => handleGenerateNotes(module.id)}
+                                                            className="gap-2"
+                                                        >
+                                                            {isGenerating ? (
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <Sparkles className="h-4 w-4" />
+                                                            )}
+                                                            Generate Topic Cheat Sheet
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </CardContent>
+                                        </CollapsibleContent>
+                                    </Card>
+                                </Collapsible>
+                            )
+                        })
                     )}
                 </TabsContent>
             </Tabs>

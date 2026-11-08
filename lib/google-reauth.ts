@@ -43,7 +43,7 @@ export function googleReauthResponse(message: string = DEFAULT_RECONNECT_MESSAGE
 }
 
 export function googleInsufficientScopeResponse(
-    message: string = 'Please reconnect Google in Settings to enable Tasks access.'
+    message: string = 'Please reconnect Google in Settings to refresh permissions.'
 ) {
     return NextResponse.json(
         {

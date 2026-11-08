@@ -10,9 +10,7 @@ import { toast } from 'sonner'
 import { GoogleAccount, GoogleService } from '@/lib/google'
 
 const SERVICES: { id: GoogleService; label: string; icon: string }[] = [
-    { id: 'tasks', label: 'Tasks', icon: '✓' },
     { id: 'calendar', label: 'Calendar', icon: '📅' },
-    { id: 'classroom', label: 'Classroom', icon: '🎓' },
 ]
 
 interface GoogleAccountsManagerProps {
@@ -212,7 +210,7 @@ export function GoogleAccountsManager({ onConnectionChange }: GoogleAccountsMana
                     </Button>
 
                     <p className="text-xs text-gray-500 text-center">
-                        Click services to assign them to different accounts (e.g., Classroom to school account)
+                        Connect your Google account to sync events with Google Calendar.
                     </p>
                 </>
             )}

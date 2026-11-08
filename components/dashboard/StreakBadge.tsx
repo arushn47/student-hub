@@ -9,7 +9,7 @@ interface StreakData {
     loading: boolean
 }
 
-export function StreakBadge({ pendingTasks }: { pendingTasks: number }) {
+export function StreakBadge({ pendingTasks = 0 }: { pendingTasks?: number }) {
     const [streakData, setStreakData] = useState<StreakData>({ streak: 0, loading: true })
 
     useEffect(() => {

@@ -15,16 +15,14 @@ export async function GET() {
             usersResult,
             notesResult,
             tasksResult,
-            assignmentsResult,
-            chatResult,
+            remindersResult,
             papersResult,
             activeToday,
         ] = await Promise.all([
             admin.from('profiles').select('id', { count: 'exact', head: true }),
             admin.from('notes').select('id', { count: 'exact', head: true }),
             admin.from('tasks').select('id', { count: 'exact', head: true }),
-            admin.from('assignments').select('id', { count: 'exact', head: true }),
-            admin.from('chat_messages').select('id', { count: 'exact', head: true }),
+            admin.from('reminders').select('id', { count: 'exact', head: true }),
             admin.from('question_papers').select('id', { count: 'exact', head: true }),
             admin
                 .from('profiles')
@@ -43,8 +41,7 @@ export async function GET() {
             totalUsers: usersResult.count || 0,
             totalNotes: notesResult.count || 0,
             totalTasks: tasksResult.count || 0,
-            totalAssignments: assignmentsResult.count || 0,
-            totalChatMessages: chatResult.count || 0,
+            totalReminders: remindersResult.count || 0,
             totalPapers: papersResult.count || 0,
             activeToday: activeToday.count || 0,
             recentSignups: recentSignups.count || 0,

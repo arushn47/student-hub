@@ -1,6 +1,6 @@
 # StudentHub
 
-An all-in-one academic productivity platform built for college students. Manage notes, tasks, exam prep, timetables, grades, budgets, and more — with AI-powered study tools and Google Workspace integration.
+An all-in-one academic productivity platform built for college students. Manage exam prep, timetables, grades, reminders, and attendance — with AI-powered study tools and Google Calendar integration.
 
 ---
 
@@ -8,12 +8,12 @@ An all-in-one academic productivity platform built for college students. Manage 
 
 | Category | Features |
 |---|---|
-| **Academics** | AI Exam Prep (syllabus → quizzes, summaries), Notes (rich-text editor with AI explain/breakdown), Tasks (drag-and-drop Kanban), Assignments (group collaboration), Grades & CGPA tracking, Question Paper archive |
+| **Academics** | AI Exam Prep (syllabus → quizzes, summaries), Grades & CGPA tracking, Question Paper archive |
 | **Campus Life** | Google Calendar sync, Timetable grid, Attendance tracker |
-| **Productivity** | Pomodoro Focus Timer (with session stats), Reminders (API-backed with notifications), Budget tracker |
-| **AI** | Study Buddy chat (Gemini 2.5 Flash), AI note explanations, syllabus analysis, quiz generation, image-to-text extraction |
-| **Integrations** | Google Calendar, Google Tasks, Google Classroom import |
-| **Infrastructure** | Row-Level Security on every table, DB-backed rate limiting, CSP + security headers, PWA support |
+| **Productivity** | Pomodoro Focus Timer (with session stats), Reminders (API-backed with notifications) |
+| **AI** | Syllabus analysis, quiz & flashcard generation, topic breakdowns, image-to-text extraction (Gemini 3.5 Flash Lite) |
+| **Integrations** | Google Calendar sync |
+| **Infrastructure** | Row-Level Security on every table, DB-backed rate limiting, CSP + security headers |
 
 ---
 
@@ -37,7 +37,7 @@ An all-in-one academic productivity platform built for college students. Manage 
 - Node.js 18+
 - A [Supabase](https://supabase.com/) project (free tier works)
 - A [Google AI Studio](https://aistudio.google.com/) API key (Gemini)
-- Google Cloud OAuth credentials for Calendar/Tasks/Classroom sync
+- Google Cloud OAuth credentials for Calendar sync
 
 ### 1. Clone & install
 

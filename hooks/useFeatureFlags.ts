@@ -10,9 +10,6 @@ interface FeatureFlags {
 // Safe initial defaults: core tools enabled, experimental/hidden features disabled by default
 const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
     exam_prep: true,
-    tasks: true,
-    notes: true,
-    assignments: false, // Disabled/hidden by default unless explicitly enabled in DB
     grades: true,
     question_papers: true,
     calendar: true,

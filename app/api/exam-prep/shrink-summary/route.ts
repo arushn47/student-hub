@@ -33,15 +33,25 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing moduleId' }, { status: 400 })
         }
 
-        // Generate condensed summary directly
+        // Shorten notes by 25-35% while strictly preserving headings, tables, formulas, and exam traps
         const prompt = `
-        You are an expert study assistant.
+        You are an expert academic editor and exam coach.
         
-        Refine the following study notes into a **"Micro-Summary"**:
-        - Reduce length by 50%.
-        - Keep ONLY the absolute most critical keywords, formulas, and mnemonics.
-        - Use ONLY bullet points.
-        - Max 10 lines.
+        TASK:
+        Shorten the provided study notes by approximately 25–35% while preserving all important exam-relevant content.
+        
+        STRICT RULES:
+        1. STRUCTURE & HEADINGS: Keep the exact same section headings (###, ####) and overall logical structure.
+        2. CONDENSE: Convert lengthy definitions, prose paragraphs, and explanations into concise, punchy bullet points.
+        3. RETAIN CRITICAL EXAM CONTENT:
+           - Retain all core concepts, classifications, and principles.
+           - Retain ALL comparison tables in full Markdown table format (ensure blank lines exist before and after tables).
+           - Retain ALL formulas (preserve LaTeX format like $E / (E + D)$).
+           - Retain examples where necessary for clarity.
+           - Retain all "Exam Watch & Trap Alerts".
+        4. TRIM: Remove repetitive explanations, conversational filler, and redundant wording.
+        5. NO OMISSION: Do NOT omit any syllabus topics or oversimplify critical technical explanations.
+        6. OUTPUT ONLY the refined markdown notes. Do not include introductory text or meta commentary.
         
         Original Notes:
         ${currentSummary}

@@ -44,7 +44,7 @@ import {
     FileText,
     CheckSquare,
     ClipboardList,
-    MessageSquare,
+    Bell,
     FolderOpen,
     Activity,
     UserPlus,
@@ -67,8 +67,7 @@ interface Stats {
     totalUsers: number
     totalNotes: number
     totalTasks: number
-    totalAssignments: number
-    totalChatMessages: number
+    totalReminders: number
     totalPapers: number
     activeToday: number
     recentSignups: number
@@ -203,8 +202,7 @@ function StatsPanel() {
         { label: 'New (7 days)', value: stats.recentSignups, icon: UserPlus, color: 'text-violet-400' },
         { label: 'Notes', value: stats.totalNotes, icon: FileText, color: 'text-amber-400' },
         { label: 'Tasks', value: stats.totalTasks, icon: CheckSquare, color: 'text-emerald-400' },
-        { label: 'Assignments', value: stats.totalAssignments, icon: ClipboardList, color: 'text-indigo-400' },
-        { label: 'Chat Messages', value: stats.totalChatMessages, icon: MessageSquare, color: 'text-pink-400' },
+        { label: 'Reminders', value: stats.totalReminders, icon: Bell, color: 'text-indigo-400' },
         { label: 'Papers', value: stats.totalPapers, icon: FolderOpen, color: 'text-orange-400' },
     ]
 
@@ -624,10 +622,8 @@ function FeatureFlagsPanel() {
     }
 
     const flagLabels: Record<string, string> = {
-        ai_chat: 'AI Study Buddy Chat',
-        google_sync: 'Google Calendar/Classroom Sync',
+        google_sync: 'Google Calendar Sync',
         exam_prep: 'AI Exam Preparation',
-        group_assignments: 'Group Assignments',
         budget_tracker: 'Budget Tracker',
         question_papers: 'Question Paper Sharing',
     }

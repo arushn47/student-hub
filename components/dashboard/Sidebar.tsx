@@ -70,11 +70,8 @@ const navGroups: { title: string | null; items: NavItem[] }[] = [
         title: 'Academics',
         items: [
             { href: '/dashboard/exam-prep', label: 'Exam Prep', icon: Target, color: 'amber', featureFlag: 'exam_prep' },
-            { href: '/dashboard/tasks', label: 'Tasks', icon: CheckSquare, color: 'emerald', featureFlag: 'tasks' },
-            { href: '/dashboard/notes', label: 'Notes', icon: FileText, color: 'blue', featureFlag: 'notes' },
-            { href: '/dashboard/assignments', label: 'Assignments', icon: ClipboardList, color: 'indigo', featureFlag: 'assignments' },
-            { href: '/dashboard/grades', label: 'Grades', icon: GraduationCap, color: 'pink', featureFlag: 'grades' },
-            { href: '/dashboard/papers', label: 'Question Papers', icon: FolderOpen, color: 'orange', featureFlag: 'question_papers' },
+            { href: '/dashboard/grades', label: 'Grades', icon: GraduationCap, color: 'pink' },
+            { href: '/dashboard/papers', label: 'Question Papers', icon: FolderOpen, color: 'orange' },
         ]
     },
     {

@@ -52,16 +52,20 @@ export async function POST(request: Request) {
         if (!dailyRl.allowed) {
             const resetDate = dailyRl.resetAt
             const resetTime = resetDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
+            const secondsLeft = Math.max(1, Math.ceil((resetDate.getTime() - Date.now()) / 1000))
+            const hoursLeft = Math.ceil(secondsLeft / 3600)
             return NextResponse.json(
                 {
-                    error: `You've reached your daily limit for Exam Prep (${DAILY_LIMITS.exam_prep.limit} processes/day). Resets around ${resetTime} IST.`,
+                    error: `You've crushed so much studying today! 🎯 Daily AI quota resets around ${resetTime} IST (~${hoursLeft}h). Perfect time to test yourself with the Flashcards and Questions already generated! 💡`,
+                    retryAfterSeconds: secondsLeft,
                     resetAt: resetDate.toISOString(),
+                    isDaily: true,
                 },
                 { status: 429, headers: rateLimitHeaders({ limit: DAILY_LIMITS.exam_prep.limit, remaining: 0, resetAt: resetDate }) }
             )
         }
 
-        // Per-minute burst limit
+        // Per-window burst limit (20 processes / 5 minutes)
         stage = 'rateLimit.exam_prep'
         const rl = await checkRateLimit(
             user.id,
@@ -70,10 +74,13 @@ export async function POST(request: Request) {
             RATE_LIMITS.exam_prep.windowSeconds
         )
         if (!rl.allowed) {
+            const secondsLeft = Math.max(1, Math.ceil((rl.resetAt.getTime() - Date.now()) / 1000))
+            const timeDesc = secondsLeft < 60 ? `~${secondsLeft}s` : `~${Math.ceil(secondsLeft / 60)}m`
             return rateLimitExceededResponse({
                 limit: RATE_LIMITS.exam_prep.limit,
                 remaining: rl.remaining,
                 resetAt: rl.resetAt,
+                customMessage: `AI is taking a quick breather! ⏳ Ready in ${timeDesc}. Review the flashcards and questions above while we prepare the next module! 💡`,
             })
         }
 
@@ -246,10 +253,11 @@ export async function POST(request: Request) {
 
             SHORT NOTES (Cheat Sheet):
             - Field name in JSON is \"short_notes\" (not \"summary\").
-            - Generate a dense, exam-day cheat sheet for this module.
-            - Use bullet points, short tables, and bold key terms. NO long paragraphs.
-            - Max 200 words. Structure it so a student can scan it in 2 minutes.
-            - Example format: headers for each sub-topic, then 2-4 bullet points of key facts/formulas.
+            - Generate a pure topic-based exam cheat sheet / revision notes for this module.
+            - STRICTLY FORBIDDEN: DO NOT write study questions, practice questions, or flashcards here.
+            - Organize strictly by syllabus topics and subtopics using headers (###).
+            - For each topic: core definition (1-2 sentences), key mechanics/principles in bullet points, and comparison tables where applicable (always separate tables with blank lines before and after).
+            - Keep it dense, high-yield, and scannable so a student can review the theory before an exam.
 
             ${subjectImportantQuestions ? '- PRIORITIZE the important topics/questions provided above when creating questions and flashcards.' : ''}
             ${topicOnly ? '\n- TOPIC-ONLY MODE: Use ONLY content relevant to this module topic. If the syllabus includes other modules/units, IGNORE them.' : ''}
@@ -583,7 +591,20 @@ function normalizeGeneratedContent(
     opts: { minQuestions: number; maxQuestions: number; expectedMostLikely: number; expectedFlashcards: number }
 ): GeneratedContent {
     const questions = Array.isArray(content.questions) ? content.questions : []
-    const flashcards = Array.isArray(content.flashcards) ? content.flashcards : []
+    const contentObj = (content as unknown) as Record<string, unknown>
+    const rawFlashcards = Array.isArray(content.flashcards)
+        ? content.flashcards
+        : Array.isArray(contentObj.flash_cards)
+        ? (contentObj.flash_cards as unknown[])
+        : Array.isArray(contentObj.flashCards)
+        ? (contentObj.flashCards as unknown[])
+        : Array.isArray(contentObj.cards)
+        ? (contentObj.cards as unknown[])
+        : Array.isArray(contentObj.deck)
+        ? (contentObj.deck as unknown[])
+        : Array.isArray((contentObj.flashcards as Record<string, unknown>)?.cards)
+        ? ((contentObj.flashcards as Record<string, unknown>).cards as unknown[])
+        : []
     const summary = typeof content.summary === 'string' ? content.summary : ''
 
     const cleanQuestions = questions
@@ -626,7 +647,7 @@ function normalizeGeneratedContent(
         }
     }
 
-    const cleanFlashcardsRaw = flashcards
+    const cleanFlashcardsRaw = rawFlashcards
         .map((f: unknown) => {
             const getStr = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
@@ -650,40 +671,66 @@ function normalizeGeneratedContent(
                 return { front: '', back: '' }
             }
 
-            const obj = f as Record<string, unknown>
+            const obj = (f || {}) as Record<string, unknown>
             const front =
                 getStr(obj.front) ||
+                getStr(obj.Front) ||
                 getStr(obj.term) ||
+                getStr(obj.Term) ||
+                getStr(obj.keyword) ||
+                getStr(obj.Keyword) ||
+                getStr(obj.concept) ||
+                getStr(obj.Concept) ||
                 getStr(obj.title) ||
+                getStr(obj.Title) ||
                 getStr(obj.question) ||
-                getStr(obj.q)
+                getStr(obj.Question) ||
+                getStr(obj.q) ||
+                getStr(obj.Q)
 
             const back =
                 getStr(obj.back) ||
+                getStr(obj.Back) ||
                 getStr(obj.definition) ||
+                getStr(obj.Definition) ||
                 getStr(obj.description) ||
+                getStr(obj.Description) ||
+                getStr(obj.meaning) ||
+                getStr(obj.Meaning) ||
                 getStr(obj.answer) ||
-                getStr(obj.a)
+                getStr(obj.Answer) ||
+                getStr(obj.a) ||
+                getStr(obj.A) ||
+                getStr(obj.summary) ||
+                getStr(obj.Summary)
 
             return { front, back }
         })
         .filter(f => f.front.length > 0 && f.back.length > 0)
 
-    const fallbackFromFlashcards = cleanFlashcardsRaw
-        .slice(0, 10)
-        .map(f => ({ front: f.front, back: f.back }))
-        .filter(f => f.front.length > 0 && f.back.length > 0)
-
-    const cleanFlashcards = (cleanFlashcardsRaw.length > 0 ? cleanFlashcardsRaw : fallbackFromFlashcards)
-        .slice(0, Math.max(0, opts.expectedFlashcards))
-
     const contentAny = content as unknown as Record<string, unknown>
-    const rawShortNotes = typeof content.summary === 'string' ? content.summary
-        : typeof contentAny.short_notes === 'string' ? contentAny.short_notes as string
-        : ''
+    const rawShortNotes =
+        (typeof contentAny.short_notes === 'string' && contentAny.short_notes.trim())
+            ? (contentAny.short_notes as string).trim()
+            : (typeof content.summary === 'string' && content.summary.trim())
+            ? content.summary.trim()
+            : ''
     let cleanSummary = ensurePointWiseSummary(rawShortNotes)
     if (!cleanSummary) {
-        cleanSummary = buildFallbackNotes(cleanQuestions, cleanFlashcards)
+        cleanSummary = buildFallbackNotes(cleanFlashcardsRaw)
+    }
+
+    let cleanFlashcards = cleanFlashcardsRaw.slice(0, Math.max(0, opts.expectedFlashcards))
+    if (cleanFlashcards.length < 5) {
+        const extracted = extractFallbackFlashcards(cleanQuestions, cleanSummary, opts.expectedFlashcards)
+        const existingFronts = new Set(cleanFlashcards.map(f => f.front.toLowerCase()))
+        for (const ext of extracted) {
+            if (!existingFronts.has(ext.front.toLowerCase())) {
+                cleanFlashcards.push(ext)
+                existingFronts.add(ext.front.toLowerCase())
+            }
+            if (cleanFlashcards.length >= opts.expectedFlashcards) break
+        }
     }
 
     return {
@@ -693,20 +740,58 @@ function normalizeGeneratedContent(
     }
 }
 
+function extractFallbackFlashcards(
+    questions: { question: string; answer: string }[],
+    summary: string,
+    desiredCount: number = 10
+): { front: string; back: string }[] {
+    const cards: { front: string; back: string }[] = []
+    const seen = new Set<string>()
+
+    // 1. Extract from markdown bullet points like - **Term**: Definition or - **Term** - Definition
+    const lines = (summary || '').split(/\r?\n/)
+    for (const line of lines) {
+        const trimmed = line.trim()
+        const boldMatch = trimmed.match(/^[-*•]\s*\*\*([^*]+)\*\*\s*[:\-–]\s*(.+)$/)
+        if (boldMatch) {
+            const front = boldMatch[1].trim()
+            const back = boldMatch[2].trim()
+            if (front && back && !seen.has(front.toLowerCase())) {
+                seen.add(front.toLowerCase())
+                cards.push({ front, back: back.slice(0, 300) })
+            }
+        }
+        if (cards.length >= desiredCount) break
+    }
+
+    // 2. Extract from questions if still need more
+    if (cards.length < desiredCount) {
+        for (const q of questions) {
+            let front = q.question.trim()
+            front = front.replace(/^(what is|what are|explain|define|describe|discuss|differentiate between|compare)\s+/i, '')
+            front = front.replace(/\?$/, '').trim()
+            if (front.length > 50) front = front.slice(0, 50).trim() + '...'
+
+            const firstSentence = q.answer.split(/(?<=[.!?])\s+/)[0]?.trim() || q.answer.slice(0, 150)
+            if (front && firstSentence && !seen.has(front.toLowerCase())) {
+                seen.add(front.toLowerCase())
+                cards.push({ front, back: firstSentence.slice(0, 300) })
+            }
+            if (cards.length >= desiredCount) break
+        }
+    }
+
+    return cards
+}
+
 function buildFallbackNotes(
-    questions: { question: string; answer: string; is_most_likely: boolean }[],
     flashcards: { front: string; back: string }[]
 ): string {
     const lines: string[] = []
 
-    lines.push('### Key Concepts (Flashcards)')
+    lines.push('### Core Concepts & Topic Summary\n')
     for (const f of flashcards) {
         lines.push(`- **${f.front}**: ${f.back}`)
-    }
-
-    lines.push('\n### Study Questions')
-    for (const q of questions) {
-        lines.push(`- **${q.question}**\n  ${q.answer}`)
     }
 
     return lines.join('\n')

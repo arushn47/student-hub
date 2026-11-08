@@ -19,8 +19,8 @@ test.describe('Protected Routes', () => {
         await expect(page).toHaveURL(/\/login/, { timeout: 10_000 })
     })
 
-    test('should redirect unauthenticated users from notes', async ({ page }) => {
-        await page.goto('/dashboard/notes')
+    test('should redirect unauthenticated users from reminders', async ({ page }) => {
+        await page.goto('/dashboard/reminders')
         await expect(page).toHaveURL(/\/login/, { timeout: 10_000 })
     })
 })

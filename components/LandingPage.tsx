@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import {
-    FileText,
-    CheckSquare,
+    ClipboardList,
+    CalendarDays,
     Timer,
     GraduationCap,
     BookOpen,
@@ -60,17 +60,17 @@ const features = [
         borderColor: 'border-indigo-500/20',
     },
     {
-        icon: FileText,
-        title: 'Notes',
-        description: 'Rich markdown notes with summaries and quiz generation. Turn what you wrote in class into something you can actually revise from.',
+        icon: Bell,
+        title: 'Smart Reminders',
+        description: 'Set custom alerts for exams, project deadlines, and academic milestones so nothing slips through the cracks.',
         color: 'from-emerald-500 to-teal-500',
         bgColor: 'bg-emerald-500/10',
         borderColor: 'border-emerald-500/20',
     },
     {
-        icon: CheckSquare,
-        title: 'Tasks',
-        description: "Kanban-style task boards with deadlines, priorities, and subject labels. See everything due this week at a glance.",
+        icon: CalendarDays,
+        title: 'Timetable',
+        description: 'Slot-based weekly schedule with class timing, classroom locations, and day-by-day lecture overviews.',
         color: 'from-fuchsia-500 to-purple-500',
         bgColor: 'bg-fuchsia-500/10',
         borderColor: 'border-fuchsia-500/20',
@@ -84,9 +84,9 @@ const features = [
         borderColor: 'border-orange-500/20',
     },
     {
-        icon: Bell,
-        title: 'Reminders & Calendar',
-        description: 'Set reminders for exams, assignments and personal deadlines. Everything in one calendar view.',
+        icon: CalendarDays,
+        title: 'Google Calendar Sync',
+        description: 'Sync your timetable, exams, and personal events directly with Google Calendar for seamless scheduling.',
         color: 'from-lime-500 to-green-500',
         bgColor: 'bg-lime-500/10',
         borderColor: 'border-lime-500/20',
@@ -161,7 +161,7 @@ export default function LandingPage() {
 
                     {/* Subheading */}
                     <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
-                        Grades, timetable, notes, tasks, attendance, and past papers —
+                        Grades, timetable, attendance, exam prep, and past papers —
                         all in one dashboard. No more switching between ten different apps.
                     </p>
 

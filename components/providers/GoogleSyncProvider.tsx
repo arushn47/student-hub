@@ -13,7 +13,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useFeatureFlags } from '@/hooks/useFeatureFlags'
 
 function GoogleIcon({ className }: { className?: string }) {
     return (
@@ -29,15 +28,11 @@ function GoogleIcon({ className }: { className?: string }) {
 // This component runs in the background and syncs Google services
 export function GoogleSyncProvider() {
     const [reconnecting, setReconnecting] = useState(false)
-    const { isEnabled } = useFeatureFlags()
 
-    // Sync every 10 minutes, show toast only when items are synced
-    // Skip classroom sync if assignments feature is disabled
     const { needsReconnect, reconnectMessage, dismissReconnect } = useGoogleSync({
         interval: 10,
         enabled: true,
-        showToasts: true,
-        skipClassroom: !isEnabled('assignments'),
+        showToasts: false,
     })
 
     const handleReconnect = async () => {

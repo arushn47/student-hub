@@ -30,11 +30,6 @@ export function getAuthUrl(options?: { redirectUri?: string }) {
             'https://www.googleapis.com/auth/userinfo.profile',
             'https://www.googleapis.com/auth/calendar',
             'https://www.googleapis.com/auth/calendar.events',
-            'https://www.googleapis.com/auth/tasks',
-            'https://www.googleapis.com/auth/tasks.readonly',
-            'https://www.googleapis.com/auth/classroom.courses.readonly',
-            'https://www.googleapis.com/auth/classroom.coursework.me.readonly',
-            'https://www.googleapis.com/auth/classroom.student-submissions.me.readonly',
         ],
         prompt: 'consent', // Force to get refresh token
     })
@@ -51,18 +46,6 @@ export function getAuthenticatedClient(tokens: { access_token: string; refresh_t
 export function getCalendarClient(tokens: { access_token: string; refresh_token?: string }) {
     const auth = getAuthenticatedClient(tokens)
     return google.calendar({ version: 'v3', auth })
-}
-
-// Tasks API helpers
-export function getTasksClient(tokens: { access_token: string; refresh_token?: string }) {
-    const auth = getAuthenticatedClient(tokens)
-    return google.tasks({ version: 'v1', auth })
-}
-
-// Classroom API helpers
-export function getClassroomClient(tokens: { access_token: string; refresh_token?: string }) {
-    const auth = getAuthenticatedClient(tokens)
-    return google.classroom({ version: 'v1', auth })
 }
 
 // Type for stored tokens
@@ -87,4 +70,4 @@ export interface GoogleAccount {
 }
 
 // Service types
-export type GoogleService = 'tasks' | 'calendar' | 'classroom'
+export type GoogleService = 'calendar'

@@ -77,8 +77,7 @@ export async function GET(req: NextRequest) {
                     name: googleName,
                     picture: googlePicture,
                     tokens,
-                    // First account gets all services, additional accounts get classroom by default
-                    services: isFirst ? ['tasks', 'calendar', 'classroom'] : ['classroom'],
+                    services: ['calendar'],
                     is_primary: isFirst,
                 })
         }

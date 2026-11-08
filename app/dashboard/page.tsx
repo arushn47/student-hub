@@ -1,26 +1,23 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient } from '@/lib/supabase/server'
 import { MotivationCard } from '@/components/dashboard/MotivationCard'
-import { TasksWidget } from '@/components/dashboard/TasksWidget'
-import { NotesWidget } from '@/components/dashboard/NotesWidget'
 import { NextClassWidget } from '@/components/dashboard/NextClassWidget'
 import { QuickActions } from '@/components/dashboard/QuickActions'
-import { FileText, CheckSquare, Clock, Target, Palmtree, TrendingUp } from 'lucide-react'
+import { Clock, Target, Palmtree, TrendingUp, Bell, CheckCircle2 } from 'lucide-react'
 import { StreakBadge } from '@/components/dashboard/StreakBadge'
 import { cn } from '@/lib/utils'
 import React from 'react'
-import type { Task, Note, ClassSchedule, SemesterBreak, Semester } from '@/types'
+import type { ClassSchedule, SemesterBreak, Semester } from '@/types'
 import { SemesterSetupBanner } from '@/components/dashboard/SemesterSetupBanner'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getStats(supabase: any, userId: string) {
-    const [notesResult, tasksResult, classesResult, semestersResult, breaksResult, subjectsResult] = await Promise.all([
-        supabase.from('notes').select('*').eq('user_id', userId).is('deleted_at', null).order('updated_at', { ascending: false }),
-        supabase.from('tasks').select('*').eq('user_id', userId).is('deleted_at', null).order('due_date', { ascending: true }),
-        supabase.from('class_schedules').select('*').eq('user_id', userId).eq('is_active', true),
-        supabase.from('semesters').select('*').eq('user_id', userId).order('start_date', { ascending: false }),
-        supabase.from('semester_breaks').select('*').eq('user_id', userId).order('start_date', { ascending: true }),
-        supabase.from('exam_subjects').select('*, exam_modules(status)').eq('user_id', userId).eq('status', 'active').order('created_at', { ascending: false }),
+    const [classesResult, semestersResult, breaksResult, subjectsResult, remindersResult] = await Promise.all([
+        supabase.from('class_schedules').select('id, day_of_week, start_time, end_time, subject_name, room, is_active').eq('user_id', userId).eq('is_active', true),
+        supabase.from('semesters').select('id, name, is_active, start_date, end_date').eq('user_id', userId).order('start_date', { ascending: false }),
+        supabase.from('semester_breaks').select('id, semester_id, name, start_date, end_date').eq('user_id', userId).order('start_date', { ascending: true }),
+        supabase.from('exam_subjects').select('id, name, total_modules, status, created_at, exam_modules(status)').eq('user_id', userId).eq('status', 'active').order('created_at', { ascending: false }),
+        supabase.from('reminders').select('id, title, remind_at, is_completed').eq('user_id', userId).eq('is_completed', false),
     ])
 
     // Find active semester and filter breaks
@@ -38,7 +35,6 @@ async function getStats(supabase: any, userId: string) {
     const subjectsRaw = (subjectsResult.data || []) as any[]
      
     const subjects = subjectsRaw.map(s => {
-         
         const modules: { status: string }[] = s.exam_modules || []
         const total = modules.length
         const ready = modules.filter(m => m.status === 'ready').length
@@ -52,9 +48,8 @@ async function getStats(supabase: any, userId: string) {
     })
 
     return {
-        notes: (notesResult.data || []) as Note[],
-        tasks: (tasksResult.data || []) as Task[],
         classes: (classesResult.data || []) as ClassSchedule[],
+        reminders: (remindersResult.data || []) as any[],
         subjects,
         breaks,
         semesters,
@@ -79,9 +74,8 @@ export default async function DashboardPage() {
     // Handle guest mode
     if (!user) {
         return <DashboardContent
-            notes={[]}
-            tasks={[]}
             classes={[]}
+            reminders={[]}
             subjects={[]}
             breaks={[]}
             semesters={[]}
@@ -90,7 +84,7 @@ export default async function DashboardPage() {
         />
     }
 
-    const { notes, tasks, classes, subjects, breaks, semesters } = await getStats(supabase, user.id)
+    const { classes, reminders, subjects, breaks, semesters } = await getStats(supabase, user.id)
     const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Student'
 
     // Log daily activity server-side (non-blocking)
@@ -104,9 +98,8 @@ export default async function DashboardPage() {
         .then(() => {}) // fire-and-forget
 
     return <DashboardContent
-        notes={notes}
-        tasks={tasks}
         classes={classes}
+        reminders={reminders}
         subjects={subjects}
         breaks={breaks}
         semesters={semesters}
@@ -116,18 +109,17 @@ export default async function DashboardPage() {
 }
 
 function DashboardContent({
-    notes,
-    tasks,
     classes,
+    reminders,
     subjects,
     breaks,
     semesters,
     userId,
     userName
 }: {
-    notes: Note[]
-    tasks: Task[]
     classes: ClassSchedule[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    reminders: any[]
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     subjects: any[]
     breaks: SemesterBreak[]
@@ -135,10 +127,7 @@ function DashboardContent({
     userId: string
     userName: string
 }) {
-    const completedTasks = tasks.filter(t => t.status === 'done').length
-    const totalTasks = tasks.length
-    const pendingTasks = totalTasks - completedTasks
-    const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+    const pendingReminders = reminders.length
 
     const greeting = () => {
         const hour = new Date().getHours()
@@ -153,6 +142,9 @@ function DashboardContent({
 
     const breakStatus = isOnBreak(today, breaks)
     const classesToday = breakStatus.onBreak ? 0 : classes.filter(c => c.day_of_week === today.getDay()).length
+
+    // Total ready modules count across all subjects
+    const totalReadyModules = subjects.reduce((sum: number, s: any) => sum + (s.modules_ready || 0), 0)
 
     // Pick the most recent subject for the hero (first non-fully-ready, else first overall)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -177,7 +169,7 @@ function DashboardContent({
                             <span className="font-medium">{breakStatus.breakName || 'On Break'}</span>
                         </div>
                     ) : (
-                        <StreakBadge pendingTasks={pendingTasks} />
+                        <StreakBadge pendingTasks={pendingReminders} />
                     )}
                 </div>
             </div>
@@ -243,18 +235,18 @@ function DashboardContent({
                     trend={subjects.length > 0 ? `${subjects.filter((s: any) => s.is_fully_ready).length} fully ready` : 'Exam Prep'}
                 />
                 <StatCard
-                    icon={CheckSquare}
-                    label="Pending Tasks"
-                    value={pendingTasks}
+                    icon={Bell}
+                    label="Active Reminders"
+                    value={pendingReminders}
                     color="violet"
-                    trend={`${completionRate}% complete`}
+                    trend={pendingReminders > 0 ? `${pendingReminders} pending` : 'All clear'}
                 />
                 <StatCard
-                    icon={FileText}
-                    label="Total Notes"
-                    value={notes.length}
+                    icon={CheckCircle2}
+                    label="Modules Ready"
+                    value={totalReadyModules}
                     color="emerald"
-                    trend="Knowledge Base"
+                    trend="Study Material"
                 />
                 <StatCard
                     icon={breakStatus.onBreak ? Palmtree : Clock}
@@ -268,18 +260,11 @@ function DashboardContent({
             {/* Quick Actions */}
             <QuickActions />
 
-            {/* Widgets Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <TasksWidget tasks={tasks} />
-                <NotesWidget notes={notes} />
-            </div>
-
             {/* Next Class */}
             <NextClassWidget classes={classes} />
         </div>
     )
 }
-
 
 function StatCard({
     icon: Icon,

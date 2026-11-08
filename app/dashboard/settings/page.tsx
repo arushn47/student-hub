@@ -369,7 +369,7 @@ export default function SettingsPage() {
                         Google Integrations
                     </CardTitle>
                     <CardDescription className="text-gray-400">
-                        Connect multiple Google accounts - use your school account for Classroom and personal for Tasks
+                        Connect your Google account to sync schedule and deadlines with Google Calendar
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

@@ -107,9 +107,9 @@ export default function ExamPrepPage() {
                 return
             }
 
-            // Fetch subjects with timeout safety
-            const queryTimeout = new Promise<{ data: null; error: Error }>((resolve) =>
-                setTimeout(() => resolve({ data: null, error: new Error('Query timeout') }), 6000)
+            // Fetch subjects with timeout safety (12s buffer for cold-starts/latency)
+            const queryTimeout = new Promise<{ data: null; error: Error | null }>((resolve) =>
+                setTimeout(() => resolve({ data: null, error: new Error('Request timed out') }), 12000)
             )
 
             const queryPromise = supabase
@@ -121,37 +121,45 @@ export default function ExamPrepPage() {
                 .eq('user_id', currentUserId)
                 .order('created_at', { ascending: false })
 
-            const { data, error } = await Promise.race([queryPromise, queryTimeout])
+            const res = await Promise.race([queryPromise, queryTimeout])
 
-            if (error) throw error
+            if (res.data) {
+                // Process to get modules_ready count
+                const processedData = res.data.map(subject => ({
+                    ...subject,
+                    modules_ready: subject.exam_modules?.filter((m: { status: string }) => m.status === 'ready').length || 0,
+                    status: subject.status || 'active',
+                }))
+                setSubjects(processedData)
+            } else {
+                // Fallback to simple query if join times out or errors
+                const { data: fallbackData } = await supabase
+                    .from('exam_subjects')
+                    .select('*')
+                    .eq('user_id', currentUserId)
+                    .order('created_at', { ascending: false })
 
-            // Process to get modules_ready count
-            const processedData = data?.map(subject => ({
-                ...subject,
-                modules_ready: subject.exam_modules?.filter((m: { status: string }) => m.status === 'ready').length || 0,
-                status: subject.status || 'active',
-            })) || []
-
-            setSubjects(processedData)
+                if (fallbackData) {
+                    setSubjects(fallbackData.map(s => ({ ...s, modules_ready: 0 })))
+                }
+            }
         } catch (error) {
-            console.error('Error fetching subjects:', error)
+            console.warn('Error fetching subjects, falling back:', error)
             // Try simpler fallback query without join
             try {
-                const currentUserId = user?.id || (await supabase.auth.getUser()).data.user?.id
+                const currentUserId = user?.id
                 if (currentUserId) {
-                    const { data, error } = await supabase
+                    const { data } = await supabase
                         .from('exam_subjects')
                         .select('*')
                         .eq('user_id', currentUserId)
                         .order('created_at', { ascending: false })
 
-                    if (!error && data) {
+                    if (data) {
                         setSubjects(data.map(s => ({ ...s, modules_ready: 0 })))
                     }
                 }
-            } catch (e) {
-                console.error('Fallback query error:', e)
-            }
+            } catch {}
         } finally {
             setLoading(false)
         }

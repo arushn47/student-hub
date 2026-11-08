@@ -4,23 +4,23 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import {
     Timer,
-    FileText,
-    CheckSquare,
-    Layers
+    Target,
+    Clock,
+    Bell
 } from 'lucide-react'
 
 const quickActions = [
     {
-        label: 'New Note',
-        icon: FileText,
-        href: '/dashboard/notes/new',
-        color: 'from-blue-500 to-cyan-500',
+        label: 'Exam Prep',
+        icon: Target,
+        href: '/dashboard/exam-prep',
+        color: 'from-amber-500 to-orange-500',
     },
     {
-        label: 'Add Task',
-        icon: CheckSquare,
-        href: '/dashboard/tasks?new=true',
-        color: 'from-emerald-500 to-teal-500',
+        label: 'Reminders',
+        icon: Bell,
+        href: '/dashboard/reminders',
+        color: 'from-blue-500 to-indigo-500',
     },
     {
         label: 'Start Focus',
@@ -29,10 +29,10 @@ const quickActions = [
         color: 'from-rose-500 to-pink-500',
     },
     {
-        label: 'Assignments',
-        icon: Layers,
-        href: '/dashboard/assignments',
-        color: 'from-amber-500 to-orange-500',
+        label: 'Timetable',
+        icon: Clock,
+        href: '/dashboard/timetable',
+        color: 'from-purple-500 to-violet-500',
     },
 ]
 

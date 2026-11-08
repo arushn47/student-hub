@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI, Part } from '@google/generative-ai'
 import { jsonrepair } from 'jsonrepair'
-const MODELS = ['gemini-2.5-flash'] as const
+const MODELS = ['gemini-3.5-flash-lite', 'gemini-2.5-flash'] as const
 function getClient(): GoogleGenerativeAI {
     const key = process.env.GEMINI_API_KEY
     if (!key) throw new Error('GEMINI_API_KEY is not configured')
@@ -114,7 +114,7 @@ export async function generateText(prompt: string | (string | Part)[]): Promise<
 const JSON_CONFIG = {
     responseMimeType: 'application/json',
     temperature: 0.2,
-    maxOutputTokens: 4096,
+    maxOutputTokens: 8192,
 }
 
 export async function generateJSON<T>(prompt: string | (string | Part)[]): Promise<T> {
@@ -194,6 +194,10 @@ function classifyGeminiError(error: unknown): Error {
     if (anyErr?.status === 429 || rawMessage.includes('429') || rawMessage.toLowerCase().includes('quota')) {
         const retryAfter = extractRetryAfterSeconds(anyErr?.errorDetails)
         return new GeminiRateLimitError(rawMessage, retryAfter)
+    }
+
+    if (process.env.NODE_ENV !== 'production' && rawMessage) {
+        return new Error(rawMessage)
     }
 
     return new Error('Failed to generate AI response. Please try again.')

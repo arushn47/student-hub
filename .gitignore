@@ -60,3 +60,5 @@ docs/
 *.traineddata
 test-results.txt
 scripts/test*
+
+.freebuff

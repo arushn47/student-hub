@@ -8,18 +8,16 @@ export type RateLimitResult = {
 }
 
 export const RATE_LIMITS = {
-    chat: { endpoint: 'chat', limit: 20, windowSeconds: 60 },
-    ai_general: { endpoint: 'ai_general', limit: 10, windowSeconds: 60 },
-    exam_prep: { endpoint: 'exam_prep', limit: 5, windowSeconds: 300 },
+    ai_general: { endpoint: 'ai_general', limit: 30, windowSeconds: 60 },
+    exam_prep: { endpoint: 'exam_prep', limit: 20, windowSeconds: 300 },
     google_sync: { endpoint: 'google_sync', limit: 10, windowSeconds: 60 },
 } as const
 
 // Daily caps — uses the same RPC with a 24h (86400s) rolling window.
 // Endpoint names are suffixed with '_daily' to keep counters separate.
 export const DAILY_LIMITS = {
-    exam_prep: { endpoint: 'exam_prep_daily', limit: 3, windowSeconds: 86400 },
-    ai_general: { endpoint: 'ai_general_daily', limit: 30, windowSeconds: 86400 },
-    chat: { endpoint: 'chat_daily', limit: 50, windowSeconds: 86400 },
+    exam_prep: { endpoint: 'exam_prep_daily', limit: 100, windowSeconds: 86400 },
+    ai_general: { endpoint: 'ai_general_daily', limit: 150, windowSeconds: 86400 },
 } as const
 
 export async function checkRateLimit(
@@ -68,10 +66,16 @@ export function rateLimitExceededResponse(params: {
     limit: number
     remaining: number
     resetAt: Date
+    customMessage?: string
 }) {
+    const secondsLeft = Math.max(1, Math.ceil((params.resetAt.getTime() - Date.now()) / 1000))
+    const timeDesc = secondsLeft < 60 ? `~${secondsLeft}s` : `~${Math.ceil(secondsLeft / 60)}m`
+    const defaultMsg = `Rate limit exceeded. AI is taking a quick breather! ⏳ Ready in ${timeDesc}. Review the notes and flashcards on your ready modules while we prepare! 💡`
+
     return NextResponse.json(
         {
-            error: 'Rate limit exceeded',
+            error: params.customMessage || defaultMsg,
+            retryAfterSeconds: secondsLeft,
             resetAt: params.resetAt.toISOString(),
         },
         {

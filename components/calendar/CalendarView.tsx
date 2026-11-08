@@ -153,18 +153,6 @@ export function CalendarView({ tasks: initialTasks, classes, breaks = [], semest
             setNewTaskTitle('')
             setShowAddTask(false)
             toast.success('Task added!')
-
-            // Sync to Google Tasks in the background (if connected)
-            fetch('/api/google/sync', { method: 'POST' })
-                .then(res => res.json())
-                .then(result => {
-                    if (result.synced > 0) {
-                        toast.success('Synced to Google Tasks!')
-                    }
-                })
-                .catch(() => {
-                    // Silently fail - Google sync is optional
-                })
         } catch (error) {
             console.error('Error saving task:', error)
             toast.error('Failed to save task')

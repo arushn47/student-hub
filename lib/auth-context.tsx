@@ -70,23 +70,36 @@ export function AuthProvider({
 
     // Listen for auth state changes (e.g. OAuth login, logout)
     useEffect(() => {
-                const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
+        let isActive = true
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
             if (event === 'SIGNED_OUT') {
                 setUser(null)
                 return
             }
 
-            // Avoid using session.user (can be insecure per Supabase warning).
-            try {
-                const { data, error } = await supabase.auth.getUser()
-                if (!error) setUser(data.user)
-            } catch (e) {
-                // If auth server is unreachable, keep current state.
-                if (isAbortError(e) || isNetworkFetchError(e)) return
+            // If we already have fresh user from server layout, skip redundant fetch on INITIAL_SESSION
+            if (event === 'INITIAL_SESSION' && initialUser) {
+                return
             }
+
+            // getUser() also acquires Supabase's auth lock. Defer it until this
+            // synchronous callback has returned to avoid a lock deadlock.
+            window.setTimeout(() => {
+                if (!isActive) return
+
+                void supabase.auth.getUser()
+                    .then(({ data, error }) => {
+                        if (isActive && !error) setUser(data.user)
+                    })
+                    .catch((e) => {
+                        // If auth server is unreachable, keep current state.
+                        if (isAbortError(e) || isNetworkFetchError(e)) return
+                    })
+            }, 0)
         })
 
         return () => {
+            isActive = false
             subscription.unsubscribe()
         }
     }, [])

@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -99,6 +100,7 @@ const gradeColors: Record<string, string> = {
 }
 
 export default function GradesPage() {
+    const { user, isGuest } = useAuth()
     const [courses, setCourses] = useState<Course[]>([])
     const [loading, setLoading] = useState(true)
     const [newCourse, setNewCourse] = useState({ name: '', credits: 3, grade: 'S', semester: 'Semester 1', category: 'none' })
@@ -177,42 +179,85 @@ export default function GradesPage() {
     // Helper to get target for a course (default S)
     const getTarget = (courseId: string) => courseTargetGrades[courseId] || 'S'
 
-    // Load curriculum from DB
+    // Load curriculum and courses with error handling
     useEffect(() => {
-        const fetchCurriculum = async () => {
-            try {
-                const { data: { user } } = await supabase.auth.getUser()
-                if (!user) return
+        let isCancelled = false
 
-                const { data, error } = await supabase
+        const loadData = async () => {
+            // Get user either from context or directly from client
+            let currentUserId = user?.id
+            if (!currentUserId) {
+                try {
+                    const { data: authData } = await supabase.auth.getUser()
+                    currentUserId = authData?.user?.id
+                } catch {
+                    // Ignore auth error
+                }
+            }
+
+            if (!currentUserId) {
+                if (!isCancelled) setLoading(false)
+                return
+            }
+
+            try {
+                const coursesPromise = supabase
+                    .from('courses')
+                    .select('*')
+                    .eq('user_id', currentUserId)
+                    .order('created_at', { ascending: false })
+
+                const curriculumPromise = supabase
                     .from('degree_requirements')
                     .select('*')
-                    .eq('user_id', user.id)
+                    .eq('user_id', currentUserId)
                     .order('created_at', { ascending: true })
 
-                const { data: profile } = await supabase.from('profiles').select('preferences').eq('id', user.id).single()
+                const profilePromise = supabase
+                    .from('profiles')
+                    .select('preferences')
+                    .eq('id', currentUserId)
+                    .single()
+
+                const [coursesRes, curriculumRes, profileRes] = await Promise.all([
+                    coursesPromise,
+                    curriculumPromise,
+                    profilePromise,
+                ])
+
+                if (isCancelled) return
+
+                if (coursesRes && 'data' in coursesRes && coursesRes.data) {
+                    setCourses(coursesRes.data)
+                    if (coursesRes.data.length > 0) {
+                        const recentSem = coursesRes.data[0].semester || 'Semester 1'
+                        setOpenSemesters({ [recentSem]: true })
+                    }
+                }
+
+                const profile = profileRes && 'data' in profileRes ? profileRes.data : null
                 const isMtech = profile?.preferences?.degree_type === 'mtech'
                 setActiveTemplate(isMtech ? 'mtech' : 'btech')
                 const referenceOrder = isMtech ? MTECH_CURRICULUM : BTECH_CURRICULUM
                 const orderMap = new Map(referenceOrder.map((cat, idx) => [cat.name, idx]))
 
-                if (!error && data && data.length > 0) {
+                const curData = curriculumRes && 'data' in curriculumRes ? curriculumRes.data : null
+                if (curData && curData.length > 0) {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const parsedData = data.map((item: any) => ({
+                    const parsedData = curData.map((item: any) => ({
                         id: item.id,
                         name: item.name,
                         required: item.required_credits
-                    })).sort((a, b) => {
-                        const idxA = orderMap.has(a.name) ? orderMap.get(a.name)! : 999;
-                        const idxB = orderMap.has(b.name) ? orderMap.get(b.name)! : 999;
-                        return idxA - idxB;
-                    });
-                    
+                    })).sort((a: any, b: any) => {
+                        const idxA = orderMap.has(a.name) ? orderMap.get(a.name)! : 999
+                        const idxB = orderMap.has(b.name) ? orderMap.get(b.name)! : 999
+                        return idxA - idxB
+                    })
                     setCurriculum(parsedData)
-                } else if (data && data.length === 0) {
+                } else if (curData && curData.length === 0) {
                     // Initialize with defaults if empty
                     const initialData = referenceOrder.map(c => ({
-                        user_id: user.id,
+                        user_id: currentUserId,
                         name: c.name,
                         required_credits: c.required
                     }))
@@ -228,33 +273,45 @@ export default function GradesPage() {
                             id: item.id,
                             name: item.name,
                             required: item.required_credits
-                        })).sort((a, b) => {
-                            const idxA = orderMap.has(a.name) ? orderMap.get(a.name)! : 999;
-                            const idxB = orderMap.has(b.name) ? orderMap.get(b.name)! : 999;
-                            return idxA - idxB;
-                        });
-                        
+                        })).sort((a: any, b: any) => {
+                            const idxA = orderMap.has(a.name) ? orderMap.get(a.name)! : 999
+                            const idxB = orderMap.has(b.name) ? orderMap.get(b.name)! : 999
+                            return idxA - idxB
+                        })
                         setCurriculum(parsedData)
                     }
                 }
             } catch (error) {
-                console.error('Error loading curriculum:', error)
+                console.error('Error loading grades data:', error)
+                toast.error('Failed to load courses')
+            } finally {
+                if (!isCancelled) {
+                    setLoading(false)
+                }
             }
         }
-        fetchCurriculum()
-    }, [])
 
-    // Sync curriculum to DB when changed (Debounced)
+        loadData()
+
+        return () => {
+            isCancelled = true
+        }
+    }, [user?.id])
+
+    // Sync curriculum to DB when user edits it (Debounced)
+    const isInitialCurriculum = useRef(true)
     useEffect(() => {
-        const timer = setTimeout(async () => {
-            // Skip initial render or if empty
-            if (curriculum.length === 0) return
+        if (isInitialCurriculum.current) {
+            if (curriculum.length > 0) isInitialCurriculum.current = false
+            return
+        }
 
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+        const timer = setTimeout(async () => {
+            const currentUserId = user?.id
+            if (!currentUserId || curriculum.length === 0) return
 
             const updates = curriculum.map(c => ({
-                user_id: user.id,
+                user_id: currentUserId,
                 name: c.name,
                 required_credits: c.required
             }))
@@ -265,48 +322,7 @@ export default function GradesPage() {
         }, 1000)
 
         return () => clearTimeout(timer)
-    }, [curriculum])
-
-
-
-    useEffect(() => {
-        const fetchCourses = async () => {
-            try {
-                const { data: { user } } = await supabase.auth.getUser()
-                if (!user) return
-
-                const { data, error } = await supabase
-                    .from('courses')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: false })
-
-                if (error) throw error
-                setCourses(data || [])
-
-                // Auto-open the most recent semester
-                if (data && data.length > 0) {
-                    const recentSem = data[0].semester || 'Semester 1'
-                    setOpenSemesters({ [recentSem]: true })
-                }
-            } catch (error) {
-                const isAbort = error instanceof DOMException && error.name === 'AbortError'
-                const isNetwork = error instanceof TypeError && /failed to fetch/i.test(error.message)
-
-                if (isAbort) return
-                if (isNetwork) {
-                    toast.error('Supabase is unreachable (ISP/network). Try WARP/VPN or retry later.')
-                    return
-                }
-
-                console.error('Error fetching courses:', error)
-                toast.error('Failed to load courses')
-            } finally {
-                setLoading(false)
-            }
-        }
-        fetchCourses()
-    }, []) // supabase is a stable module singleton — no need in deps
+    }, [curriculum, user?.id])
 
     const calculateGPA = (courseList: Course[]): string => {
         if (courseList.length === 0) return '0.00'
@@ -505,8 +521,8 @@ export default function GradesPage() {
 
         try {
             setIsSubmitting(true)
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) {
+            const currentUserId = user?.id
+            if (!currentUserId) {
                 toast.error('You must be logged in')
                 return
             }
@@ -514,7 +530,7 @@ export default function GradesPage() {
             const { data, error } = await supabase
                 .from('courses')
                 .insert({
-                    user_id: user.id,
+                    user_id: currentUserId,
                     name: newCourse.name,
                     credits: newCourse.credits,
                     grade: newCourse.grade,
@@ -600,8 +616,8 @@ export default function GradesPage() {
 
         try {
             setIsSubmitting(true)
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) {
+            const currentUserId = user?.id
+            if (!currentUserId) {
                 toast.error('You must be logged in')
                 return
             }
@@ -616,7 +632,7 @@ export default function GradesPage() {
                     category: editForm.category || null
                 })
                 .eq('id', editingCourse.id)
-                .eq('user_id', user.id)
+                .eq('user_id', currentUserId)
 
             if (error) {
                 console.error('Supabase update error:', error)
@@ -675,13 +691,13 @@ export default function GradesPage() {
     // Clear all courses
     const clearAllCourses = async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+            const currentUserId = user?.id
+            if (!currentUserId) return
 
             const { error } = await supabase
                 .from('courses')
                 .delete()
-                .eq('user_id', user.id)
+                .eq('user_id', currentUserId)
 
             if (error) throw error
 
@@ -810,8 +826,8 @@ export default function GradesPage() {
                         onExtract={async (data) => {
                             if (data.courses && Array.isArray(data.courses)) {
                                 try {
-                                    const { data: { user } } = await supabase.auth.getUser()
-                                    if (!user) return
+                                    const currentUserId = user?.id
+                                    if (!currentUserId) return
 
                                     // Build a map of existing courses by name for O(1) lookup
                                     const existingByName = new Map(
@@ -833,7 +849,7 @@ export default function GradesPage() {
                                         }
 
                                         return {
-                                            user_id: user.id,
+                                            user_id: currentUserId,
                                             name: c.name || 'Unknown Course',
                                             credits: c.credits ?? 3,
                                             grade: grade,
