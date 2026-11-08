@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { GoogleAccountsManager } from '@/components/settings/GoogleAccountsManager'
-import { Settings, User, Bell, Palette, Shield, Loader2 } from 'lucide-react'
+import { Settings, User, Bell, Palette, Shield, Loader2, KeyRound, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTheme } from 'next-themes'
 
@@ -43,6 +43,10 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [sendingReset, setSendingReset] = useState(false)
+    const [newPassword, setNewPassword] = useState('')
+    const [confirmPassword, setConfirmPassword] = useState('')
+    const [updatingPassword, setUpdatingPassword] = useState(false)
+    const [showPassword, setShowPassword] = useState(false)
     const [profile, setProfile] = useState<UserProfile | null>(null)
     const [googleConnected, setGoogleConnected] = useState(false)
         const { theme, setTheme } = useTheme()
@@ -330,53 +334,159 @@ export default function SettingsPage() {
                 <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
                         <Shield className="h-5 w-5 text-purple-400" />
-                        Security
+                        Security & Password
                     </CardTitle>
                     <CardDescription className="text-gray-400">
-                        Account security options
+                        Change your password directly or send a recovery email
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <Button
-                        variant="outline"
-                        disabled={sendingReset}
-                        className="w-full border-white/10 text-white hover:bg-white/5"
-                        onClick={async () => {
-                            if (!profile?.email) {
-                                toast.error('No email address found for this account')
+                <CardContent className="space-y-6">
+                    {/* Direct password change form (no email or rate limit needed) */}
+                    <form
+                        onSubmit={async (e) => {
+                            e.preventDefault()
+
+                            if (newPassword.length < 6) {
+                                toast.error('Password must be at least 6 characters')
                                 return
                             }
 
-                            setSendingReset(true)
+                            if (newPassword !== confirmPassword) {
+                                toast.error("Passwords don't match")
+                                return
+                            }
+
+                            setUpdatingPassword(true)
                             try {
-                                const redirectUrl = `${window.location.origin}/auth/callback?next=/reset-password`
-                                const { error } = await supabase.auth.resetPasswordForEmail(profile.email, {
-                                    redirectTo: redirectUrl,
+                                const { error } = await supabase.auth.updateUser({
+                                    password: newPassword,
                                 })
+
                                 if (error) {
-                                    toast.error(error.message || 'Failed to send reset email')
-                                } else {
-                                    toast.success('Password reset email sent! Check your inbox.')
+                                    toast.error(error.message)
+                                    return
                                 }
+
+                                toast.success('Password updated successfully!')
+                                setNewPassword('')
+                                setConfirmPassword('')
                             } catch {
-                                toast.error('An unexpected error occurred')
+                                toast.error('Failed to update password')
                             } finally {
-                                setSendingReset(false)
+                                setUpdatingPassword(false)
                             }
                         }}
+                        className="space-y-4"
                     >
-                        {sendingReset ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Sending Reset Email...
-                            </>
-                        ) : (
-                            'Send Password Reset Email'
-                        )}
-                    </Button>
-                    <p className="text-xs text-gray-500 text-center">
-                        We&apos;ll send a link to reset your password
-                    </p>
+                        <div className="space-y-2">
+                            <Label htmlFor="new-password" className="text-gray-300 flex items-center gap-1.5 text-sm">
+                                <KeyRound className="h-4 w-4 text-purple-400" />
+                                New Password
+                            </Label>
+                            <div className="relative">
+                                <Input
+                                    id="new-password"
+                                    type={showPassword ? 'text' : 'password'}
+                                    placeholder="Enter new password (min. 6 characters)"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    minLength={6}
+                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 pr-10"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                                    title={showPassword ? 'Hide password' : 'Show password'}
+                                >
+                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="confirm-new-password" className="text-gray-300 text-sm">
+                                Confirm New Password
+                            </Label>
+                            <Input
+                                id="confirm-new-password"
+                                type={showPassword ? 'text' : 'password'}
+                                placeholder="Re-enter new password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                minLength={6}
+                                className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
+                            />
+                        </div>
+
+                        <Button
+                            type="submit"
+                            disabled={updatingPassword || !newPassword || !confirmPassword}
+                            className="w-full bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium disabled:opacity-50"
+                        >
+                            {updatingPassword ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Updating Password...
+                                </>
+                            ) : (
+                                'Change Password'
+                            )}
+                        </Button>
+                    </form>
+
+                    <div className="relative pt-2">
+                        <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-white/10" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-slate-950 px-2 text-gray-400">Or send reset email</span>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={sendingReset}
+                            className="w-full border-white/10 text-white hover:bg-white/5"
+                            onClick={async () => {
+                                if (!profile?.email) {
+                                    toast.error('No email address found for this account')
+                                    return
+                                }
+
+                                setSendingReset(true)
+                                try {
+                                    const redirectUrl = `${window.location.origin}/auth/callback?next=/reset-password`
+                                    const { error } = await supabase.auth.resetPasswordForEmail(profile.email, {
+                                        redirectTo: redirectUrl,
+                                    })
+                                    if (error) {
+                                        toast.error(error.message || 'Failed to send reset email')
+                                    } else {
+                                        toast.success('Password reset email sent! Check your inbox.')
+                                    }
+                                } catch {
+                                    toast.error('An unexpected error occurred')
+                                } finally {
+                                    setSendingReset(false)
+                                }
+                            }}
+                        >
+                            {sendingReset ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Sending Reset Email...
+                                </>
+                            ) : (
+                                'Send Password Reset Email'
+                            )}
+                        </Button>
+                        <p className="text-xs text-gray-500 text-center">
+                            Sends a link to {profile?.email || 'your email'}. Note: Supabase limits emails on free tier.
+                        </p>
+                    </div>
                 </CardContent>
             </Card>
 
