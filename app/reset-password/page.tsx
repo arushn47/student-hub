@@ -17,6 +17,7 @@ export default function ResetPasswordPage() {
     const [loading, setLoading] = useState(false)
     const [verifying, setVerifying] = useState(true)
     const [hasSession, setHasSession] = useState(false)
+    const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const router = useRouter()
 
     useEffect(() => {
@@ -24,8 +25,13 @@ export default function ResetPasswordPage() {
 
         const checkRecoveryState = async () => {
             try {
-                // 1. Check if there's a code in search params (PKCE callback)
                 const searchParams = new URLSearchParams(window.location.search)
+                const urlError = searchParams.get('error_description') || searchParams.get('error')
+                if (urlError) {
+                    setErrorMessage(urlError)
+                }
+
+                // 1. Check if there's a code in search params (PKCE callback)
                 const code = searchParams.get('code')
                 if (code) {
                     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
@@ -158,7 +164,7 @@ export default function ResetPasswordPage() {
                         </div>
                         <CardTitle className="text-2xl font-bold text-white">Link Expired or Invalid</CardTitle>
                         <CardDescription className="text-gray-400">
-                            This password reset link is invalid or has already expired. Please request a new one.
+                            {errorMessage || 'This password reset link is invalid or has already expired. Please request a new one.'}
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">

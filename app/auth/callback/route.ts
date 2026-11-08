@@ -7,6 +7,13 @@ export async function GET(request: Request) {
     const token_hash = searchParams.get('token_hash')
     const type = searchParams.get('type') as 'recovery' | 'signup' | 'email' | null
     const next = searchParams.get('next') ?? (type === 'recovery' ? '/reset-password' : '/dashboard')
+    const errorParam = searchParams.get('error')
+    const errorDescription = searchParams.get('error_description')
+
+    if (errorParam && (next === '/reset-password' || type === 'recovery')) {
+        const desc = errorDescription || errorParam
+        return NextResponse.redirect(`${origin}/reset-password?error=${encodeURIComponent(desc)}`)
+    }
 
     const supabase = await createClient()
 

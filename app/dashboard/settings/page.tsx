@@ -42,6 +42,7 @@ interface UserProfile {
 export default function SettingsPage() {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [sendingReset, setSendingReset] = useState(false)
     const [profile, setProfile] = useState<UserProfile | null>(null)
     const [googleConnected, setGoogleConnected] = useState(false)
         const { theme, setTheme } = useTheme()
@@ -338,17 +339,40 @@ export default function SettingsPage() {
                 <CardContent className="space-y-4">
                     <Button
                         variant="outline"
+                        disabled={sendingReset}
                         className="w-full border-white/10 text-white hover:bg-white/5"
                         onClick={async () => {
-                            const { error } = await supabase.auth.resetPasswordForEmail(profile?.email || '')
-                            if (error) {
-                                toast.error('Failed to send reset email')
-                            } else {
-                                toast.success('Password reset email sent!')
+                            if (!profile?.email) {
+                                toast.error('No email address found for this account')
+                                return
+                            }
+
+                            setSendingReset(true)
+                            try {
+                                const redirectUrl = `${window.location.origin}/auth/callback?next=/reset-password`
+                                const { error } = await supabase.auth.resetPasswordForEmail(profile.email, {
+                                    redirectTo: redirectUrl,
+                                })
+                                if (error) {
+                                    toast.error(error.message || 'Failed to send reset email')
+                                } else {
+                                    toast.success('Password reset email sent! Check your inbox.')
+                                }
+                            } catch {
+                                toast.error('An unexpected error occurred')
+                            } finally {
+                                setSendingReset(false)
                             }
                         }}
                     >
-                        Send Password Reset Email
+                        {sendingReset ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Sending Reset Email...
+                            </>
+                        ) : (
+                            'Send Password Reset Email'
+                        )}
                     </Button>
                     <p className="text-xs text-gray-500 text-center">
                         We&apos;ll send a link to reset your password
