@@ -11,15 +11,16 @@ interface SemesterSetupBannerProps {
 
 export function SemesterSetupBanner({ userId }: SemesterSetupBannerProps) {
     const [wizardOpen, setWizardOpen] = useState(false)
-    const [dismissed, setDismissed] = useState(false)
-
-    useEffect(() => {
-        try {
-            if (localStorage.getItem('student-hub:semester-banner-dismissed') === 'true') {
-                setDismissed(true)
+    const [dismissed, setDismissed] = useState(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                return localStorage.getItem('student-hub:semester-banner-dismissed') === 'true'
+            } catch {
+                return false
             }
-        } catch {}
-    }, [])
+        }
+        return false
+    })
 
     const handleDismiss = () => {
         setDismissed(true)

@@ -243,12 +243,11 @@ export default function GradesPage() {
 
                 const curData = curriculumRes && 'data' in curriculumRes ? curriculumRes.data : null
                 if (curData && curData.length > 0) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const parsedData = curData.map((item: any) => ({
+                    const parsedData = curData.map((item: { id: string; name: string; required_credits: number }) => ({
                         id: item.id,
                         name: item.name,
                         required: item.required_credits
-                    })).sort((a: any, b: any) => {
+                    })).sort((a: { name: string }, b: { name: string }) => {
                         const idxA = orderMap.has(a.name) ? orderMap.get(a.name)! : 999
                         const idxB = orderMap.has(b.name) ? orderMap.get(b.name)! : 999
                         return idxA - idxB
@@ -268,12 +267,11 @@ export default function GradesPage() {
                         .select()
 
                     if (!insertError && inserted) {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        const parsedData = inserted.map((item: any) => ({
+                        const parsedData = inserted.map((item: { id: string; name: string; required_credits: number }) => ({
                             id: item.id,
                             name: item.name,
                             required: item.required_credits
-                        })).sort((a: any, b: any) => {
+                        })).sort((a: { name: string }, b: { name: string }) => {
                             const idxA = orderMap.has(a.name) ? orderMap.get(a.name)! : 999
                             const idxB = orderMap.has(b.name) ? orderMap.get(b.name)! : 999
                             return idxA - idxB

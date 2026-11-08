@@ -720,7 +720,7 @@ function normalizeGeneratedContent(
         cleanSummary = buildFallbackNotes(cleanFlashcardsRaw)
     }
 
-    let cleanFlashcards = cleanFlashcardsRaw.slice(0, Math.max(0, opts.expectedFlashcards))
+    const cleanFlashcards = cleanFlashcardsRaw.slice(0, Math.max(0, opts.expectedFlashcards))
     if (cleanFlashcards.length < 5) {
         const extracted = extractFallbackFlashcards(cleanQuestions, cleanSummary, opts.expectedFlashcards)
         const existingFronts = new Set(cleanFlashcards.map(f => f.front.toLowerCase()))

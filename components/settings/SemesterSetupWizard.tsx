@@ -321,9 +321,9 @@ export function SemesterSetupWizard({
             toast.success(`Successfully configured ${generatedSemesters.length} semesters!`)
             onComplete()
             onOpenChange(false)
-        } catch (error: any) {
+        } catch (error) {
             console.error('Error saving semesters:', error)
-            toast.error(error?.message || 'Failed to configure semesters. Please try again.')
+            toast.error(error instanceof Error ? error.message : 'Failed to configure semesters. Please try again.')
         } finally {
             setLoading(false)
         }

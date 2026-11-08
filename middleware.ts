@@ -39,7 +39,8 @@ export async function middleware(request: NextRequest) {
     if (
         code &&
         !request.nextUrl.pathname.startsWith('/auth/callback') &&
-        !request.nextUrl.pathname.startsWith('/api/auth/google/callback')
+        !request.nextUrl.pathname.startsWith('/api/auth/google/callback') &&
+        !request.nextUrl.pathname.startsWith('/reset-password')
     ) {
         const url = request.nextUrl.clone()
         url.pathname = '/auth/callback'

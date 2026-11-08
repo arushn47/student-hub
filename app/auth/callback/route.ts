@@ -16,6 +16,10 @@ export async function GET(request: Request) {
         if (!error) {
             return NextResponse.redirect(`${origin}${next}`)
         }
+        console.error('Callback code exchange error:', error)
+        if (next === '/reset-password' || type === 'recovery') {
+            return NextResponse.redirect(`${origin}/reset-password?code=${encodeURIComponent(code)}`)
+        }
     }
 
     // Implicit / magic-link flow: verify OTP token hash
@@ -24,6 +28,14 @@ export async function GET(request: Request) {
         if (!error) {
             return NextResponse.redirect(`${origin}${next}`)
         }
+        console.error('Callback verifyOtp error:', error)
+        if (type === 'recovery' || next === '/reset-password') {
+            return NextResponse.redirect(`${origin}/reset-password?token_hash=${encodeURIComponent(token_hash)}&type=recovery`)
+        }
+    }
+
+    if (next === '/reset-password' || type === 'recovery') {
+        return NextResponse.redirect(`${origin}/reset-password`)
     }
 
     // Return the user to an error page with instructions

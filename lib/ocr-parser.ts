@@ -33,7 +33,7 @@ function normalizeSlotCode(code: string): string {
 }
 
 function normalizeCourseCode(code: string): string {
-    let normalized = code.toUpperCase().replace(/\s+/g, '');
+    const normalized = code.toUpperCase().replace(/\s+/g, '');
     const prefix = normalized.replace(/[^A-Z]/g, '');
     let suffix = normalized.substring(prefix.length);
     

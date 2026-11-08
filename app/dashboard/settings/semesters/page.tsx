@@ -99,9 +99,9 @@ export default function SemesterSettingsPage() {
 
             if (semestersRes.data) setSemesters(semestersRes.data)
             if (breaksRes.data) setBreaks(breaksRes.data)
-        } catch (error: any) {
+        } catch (error) {
             console.error('Error fetching data:', error)
-            toast.error(error?.message || 'Failed to load semesters')
+            toast.error(error instanceof Error ? error.message : 'Failed to load semesters')
         } finally {
             setLoading(false)
         }
@@ -266,9 +266,9 @@ export default function SemesterSettingsPage() {
             setEditingSemester(null)
             setSemesterForm({ name: '', start_date: '', end_date: '' })
             localStorage.removeItem('student-hub:semester-form-state')
-        } catch (error: any) {
+        } catch (error) {
             console.error('Error saving semester:', error)
-            toast.error(error?.message || 'Failed to save semester')
+            toast.error(error instanceof Error ? error.message : 'Failed to save semester')
         } finally {
             setSaving(false)
         }
@@ -338,9 +338,9 @@ export default function SemesterSettingsPage() {
 
             toast.success('Semester deleted')
             fetchData()
-        } catch (error: any) {
+        } catch (error) {
             console.error('Error deleting semester:', error)
-            toast.error(error?.message || 'Failed to delete semester')
+            toast.error(error instanceof Error ? error.message : 'Failed to delete semester')
         }
     }
 
@@ -360,9 +360,9 @@ export default function SemesterSettingsPage() {
 
             toast.success('Active semester updated')
             fetchData()
-        } catch (error: any) {
+        } catch (error) {
             console.error('Error setting active semester:', error)
-            toast.error(error?.message || 'Failed to update active semester')
+            toast.error(error instanceof Error ? error.message : 'Failed to update active semester')
         }
     }
 
@@ -413,9 +413,9 @@ export default function SemesterSettingsPage() {
             setEditingBreak(null)
             setBreakForm({ name: '', start_date: '', end_date: '', break_type: 'holiday' })
             localStorage.removeItem('student-hub:break-form-state')
-        } catch (error: any) {
+        } catch (error) {
             console.error('Error saving break:', error)
-            toast.error(error?.message || 'Failed to save break')
+            toast.error(error instanceof Error ? error.message : 'Failed to save break')
         } finally {
             setSaving(false)
         }
@@ -429,9 +429,9 @@ export default function SemesterSettingsPage() {
             if (error) throw error
             toast.success('Break deleted')
             fetchData()
-        } catch (error: any) {
+        } catch (error) {
             console.error('Error deleting break:', error)
-            toast.error(error?.message || 'Failed to delete break')
+            toast.error(error instanceof Error ? error.message : 'Failed to delete break')
         }
     }
 
